@@ -1,7 +1,8 @@
 import { FuzzySuggestModal, TFile, App, FuzzyMatch } from 'obsidian';
-import { getSettings } from 'src/plugin';
+import { getSettings } from 'src/main';
 import { Message } from 'src/types/chat';
 import { importConversation } from 'src/utils/chat/chatHistory';
+
 
 export class ChatHistoryModal extends FuzzySuggestModal<TFile> {
   private onChoose: (file: TFile) => void;

@@ -1,17 +1,27 @@
 import { Content, Part } from "@google/genai";
-import { getSettings } from "src/plugin";
+
+import { getSettings } from "src/main";
 import { imageToBase64 } from "src/utils/parsing/imageBase64";
-import { Message } from "src/types/chat";
+
+import type { Message } from "src/types/ai";
 
 
 // Function that prepare the prompt into inputs for the agent
-// This function only manages text and files, function calls are not handled here
-// Look how to handle function calls in buildChatHistory
 export async function prepareModelInputs(
-  user: string,
+  prompt: string,
   files: File[],
+  attachments: string[],
 ): Promise<Part[]> {
-  const parts: Part[] = [{ text: user }];
+  // Add note paths (attachments) to the prompt
+  let text = prompt;
+  if (attachments.length > 0) {
+    text += "\n###\nAttached Obsidian notes: ";
+    for (const attachment of attachments) text += attachment + "\n";
+    text += "\n###\n";
+  };
+
+  // Add files to the parts
+  const parts: Part[] = [{ text }];
 
   for (const file of files) {
     const base64 = await imageToBase64(file);
@@ -43,16 +53,14 @@ export async function buildChatHistory(
   selectedMessages = selectedMessages.reverse(); 
 
   for (const message of selectedMessages) {
-    if (message.sender === "error") continue;
+    if (message.type === "error") continue;
 
-    // We need to include the function response (user) and the function call (model)
-    // Per tool call made by the model
-    if (message.toolCalls.length > 0) {
-      for (const funcCall of message.toolCalls) {
+    // We need to include, per tool call, the function response (user) and the function call (model)
+    if (message.type === "tool") {
         const modelFunctionCall: Part[] = [{
           functionCall: {
-            name: funcCall.name,
-            args: funcCall.args,
+            name: message.tool_name,
+            args: message.tool_arguments,
           }
         }];
         chatHistory.push({
@@ -62,17 +70,16 @@ export async function buildChatHistory(
 
         const userFunctionResponse: Part[] = [{
           functionResponse: {
-            name: funcCall.name,
-            response: funcCall.response
+            name: message.tool_name,
+            response: message.tool_response
           }
         }]
         chatHistory.push({
           role: "user",
           parts: userFunctionResponse,
         });
-      }
 
-      if (message.content.trim().length > 0) {
+      if (message.content && message.content.trim().length > 0) {
         const modelFinalAnswer: Part[] = [{
           text: message.content,
         }]
@@ -82,11 +89,11 @@ export async function buildChatHistory(
         });
       }
     } else {
-      const parts: Part[] = await prepareModelInputs(message.content, []);
-      chatHistory.push({
-        role: message.sender === "user" ? "user" : "model",   
-        parts: parts,
-      });
+      let role = "model";
+      if (message.type === "user") role = "user";
+
+      const parts: Part[] = await prepareModelInputs(message.content || "", [], message.attachments || []);
+      chatHistory.push({ role, parts });
     }
   };
   

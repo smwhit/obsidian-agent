@@ -1,10 +1,12 @@
 import { Trash2, Plus, History } from "lucide-react";
 import { TFile } from "obsidian";
-import { getApp } from "src/plugin";
+
+import { getApp } from "src/main";
 import { handleCreateChat, handleDeleteChat } from "src/feature/chat/handlers/chatHandlers";
 import { DeleteChatModal } from "src/feature/modals/DeleteChatModal";
 import { ChatHistoryModal } from "src/feature/modals/ChatHistoryModal";
-import { FormProps } from "src/types/chat";
+import type { FormProps } from "src/types/chat";
+
 
 export default function Form({
   activeChat,

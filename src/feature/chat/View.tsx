@@ -1,7 +1,9 @@
 import { createRoot, Root } from 'react-dom/client';
 import { ItemView, WorkspaceLeaf, IconName, TFile } from 'obsidian';
-import { ObsidianAgentPlugin } from 'src/plugin';
-import Chat, { ChatRef } from 'src/feature/chat/components/Chat';
+
+import ObsidianAgentPlugin from 'src/main';
+import { Chat, ChatRef } from 'src/feature/chat/components/Chat';
+
 
 export const VIEW_TYPE_AGENT = 'agent-chat-view';
 

@@ -1,28 +1,6 @@
-import { Type } from '@google/genai';
 import { findClosestFile, findMatchingFolder } from "src/utils/notes/searching";
 
 
-export const vaultSearchFunctionDeclaration = {
-  name: "vault_search",
-  description: "Searches for notes and folders in Obsidian's user vault.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      name: {
-        type: Type.STRING,
-        description: "The path or name to search for.",
-      },
-      isNote: {
-        type: Type.BOOLEAN,
-        description: "Whether is a note (True) or a folder (False)",
-        default: true,
-      },
-    },
-    required: ["name"],
-  },
-};
-
-// Search notes or folders in the vault with their name or path
 export async function vaultSearch(
   name: string, 
   isNote: boolean = true,

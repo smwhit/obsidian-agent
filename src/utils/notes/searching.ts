@@ -1,5 +1,5 @@
 import { TFile, TFolder } from "obsidian";
-import { getApp } from "src/plugin";
+import { getApp } from "src/main";
 
 // Finds the closest file path to the target
 export function findClosestFile(fileName: string): TFile | null {

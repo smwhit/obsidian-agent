@@ -1,69 +1,100 @@
-import { FuzzySuggestModal, App, FuzzyMatch } from 'obsidian';
-import { getSettings } from 'src/plugin';
+import { useState } from "react";
+import { createRoot, Root } from "react-dom/client";
+import { Modal } from 'obsidian';
+
+import { getApp, getSettings } from 'src/main';
 import { allAvailableModels } from 'src/settings/models';
-import { Model } from 'src/types/ai';
 
-export class ChooseModelModal extends FuzzySuggestModal<Model> {
-  private onChoose: (model: Model) => void;
-  protected activeModel: string;
-  protected availableModels: Model[];
+import type { Provider, Model } from 'src/types/ai';
 
-  constructor(app: App, onChoose: (model: Model) => void) {
-    super(app)
-    const settings = getSettings(); 
-    this.onChoose = onChoose;
-    this.activeModel = settings.model;
-    this.availableModels = allAvailableModels;
+
+function ChooseModel() {
+  const settings = getSettings();
+
+  const providers = Object.keys(allAvailableModels);
+  const [provider, setProvider] = useState<Provider>(settings.provider as Provider);
+
+  const models: Model[] = allAvailableModels[provider] || []
+  const [model, setModel] = useState<string>(settings.model);
+
+  const handleSaveModel = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    settings.provider = provider;
+    settings.model = model;
+  };
+
+  return (
+    <div>
+      <form onSubmit={handleSaveModel} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {/* Provider dropdown */}
+        <label htmlFor="provider">Provider</label>
+        <select 
+          value={provider} 
+          onChange={(e) => {
+            const newProvider = e.target.value as Provider;
+            setProvider(newProvider);
+          
+            const newModels = allAvailableModels[newProvider];
+            setModel(newModels[0].name);
+          }}
+        >
+          {providers.map((provider) => (
+            <option key={provider} value={provider}>
+              {provider}
+            </option>
+          ))}
+        </select>
+
+        {/* Model dropdown */}
+        <label htmlFor="model">Model</label>
+        <select
+          value={model}
+          onChange={(e) => setModel(e.target.value) }
+        >
+          {models.map((model) => (
+            <option key={model.name} value={model.name}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+        
+        <div style={{ display: "flex", justifyContent: "center", marginTop: "10px" }}>
+          <button type="submit" style={{ maxWidth: "100px", width: "100%" }}>Save</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+export class ChooseModelModal extends Modal {
+  private root: Root | undefined;
+
+  constructor() {
+    const app = getApp();
+
+    super(app);
+    this.setTitle("Select model");
   }
 
-  protected formatModelName(model: Model, isActive: boolean): string {
-    let name = model.name;
-    if (isActive) name += " (current)";
-    return name;
+  onOpen(): Promise<void> | void {
+    const { contentEl } = this;
+    
+    contentEl.empty();
+    const container = contentEl.createDiv();
+    this.root = createRoot(container);
+
+    this.modalEl.style.width = '50%';
+    this.modalEl.style.maxWidth = '600px';
+    this.modalEl.style.height = '30%';
+    this.modalEl.style.maxHeight = '300px';
+
+    this.root.render(
+      <ChooseModel/>
+    )
   }
 
-  getItems(): Model[] {
-    return this.availableModels;
-  }
-
-  getItemText(item: Model): string {
-    return item.name;
-  }
-
-  onChooseItem(item: Model): void {
-    this.onChoose(item);
-    this.close();
-  }
-
-  renderSuggestion(modelMatch: FuzzyMatch<Model>, el: HTMLElement): void {
-    const { item: model } = modelMatch;
-    el.empty();
-  
-    // Color per provider
-    const providerColorMap: Record<string, string> = {
-      google: "#7895F9",
-    };
-    const color = providerColorMap[model.provider.toLowerCase()] || "#CCCCCC";
-  
-    const wrapper = el.createDiv({ cls: "obsidian-agent__model-modal__suggestion-wrapper" });
-  
-    // Color circle
-    const colorCircle = wrapper.createDiv({ cls: "obsidian-agent__model-modal__color-circle", attr: { style: `background: ${color}` } });
-
-    // Text container
-    const textContainer = wrapper.createDiv({ cls: "obsidian-agent__model-modal__text-container" });
-  
-    const nameEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__name" });
-    nameEl.setText(model.name + (model.name === this.activeModel ? " (current)" : ""));
-  
-    let capabilities = "text, " + model.capabilities.join(", ")
-    if (!model.capabilities || model.capabilities.length < 1) {
-      capabilities = "text-only"
-    } 
-    const capsEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__info-bold" });
-    capsEl.setText(`Capabilities: ${capabilities}`);
-  
-    const descEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__info" });
-    descEl.setText(`${model.description}`);
+  onClose(): void {
+    this.root?.unmount();
   }
 }

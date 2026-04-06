@@ -1,23 +1,24 @@
 import { useState, useEffect, useRef } from "react";
 import { AtSign, X, CornerDownLeft, ChevronDown, Image } from "lucide-react";
 import { TFile } from "obsidian";
-import { getApp, getPlugin, getSettings } from "src/plugin";
+
+import { getApp, getPlugin, getSettings } from "src/main";
 import { handleCall } from "src/feature/chat/handlers/aiHandlers";
 import { AddContextModal } from "src/feature/modals/AddContextModal";
 import { ChooseModelModal } from "src/feature/modals/ChooseModelModal";
-import { allAvailableModels } from "src/settings/models";
-import { Attachment, InputProps } from "src/types/chat";
-import { Model } from "src/types/ai";
-import { AgentSettings } from "src/settings/SettingsTab";
+import { InputProps } from "src/types/chat";
+import { AgentSettings } from "src/settings/settings";
 
-export default function Input({
-  initialValue,
+
+export default function ChatInput({
   activeChat,
-  editingMessageIndex,
-  isRegeneration,
+  initialValue = "",
+  attachments = [],
+  messageIndex,
+  isRegeneration = false,
   setIsEditing,
+  conversation,
   setConversation,
-  attachments,
 }: InputProps) {
   const settings = getSettings();
   const apiKey = settings.googleApiKey?.trim();
@@ -28,18 +29,14 @@ export default function Input({
   const canSend = message.trim() && activeChat && apiKey;
 
   const [selectedModel, setSelectedModel] = useState<string>(getSettings().model);
-  const [selectedNotes, setSelectedNotes] = useState<Attachment[]>(attachments);
+  const [selectedNotes, setSelectedNotes] = useState<string[]>(attachments);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [canUpload, setCanUpload] = useState<boolean>(false);
-
+  
   useEffect(() => {
     const plugin = getPlugin();
   
     const handleSettingsUpdate = (newSettings: AgentSettings) => {
       setSelectedModel(newSettings.model);
-      setCanUpload(
-        allAvailableModels.find(m => m.name === newSettings.model)?.capabilities.includes("vision") ?? false
-      );
     };
   
     plugin.settingsEmitter.on("settings-updated", handleSettingsUpdate);
@@ -49,12 +46,6 @@ export default function Input({
       plugin.settingsEmitter.off("settings-updated", handleSettingsUpdate);
     };
   }, []);
-  
-  useEffect(() => {
-    // Find the model in the list of available models and check if can upload images or not
-    const model: Model = allAvailableModels.find(model => model.name === selectedModel)!;
-    setCanUpload(model.capabilities.includes("vision"));
-  }, [selectedModel])
 
   // Disable or not the button
   const getButtonTitle = () => {
@@ -71,40 +62,16 @@ export default function Input({
       setIsEditing(false);
     }
 
-    await handleCall(
-      activeChat!,
-      editingMessageIndex,
+    await handleCall({
+      activeChat,
+      conversation,
       message,
-      selectedNotes,
-      selectedFiles,
-      setConversation,
+      messageIndex,
+      files: selectedFiles,
+      attachments: selectedNotes,
       isRegeneration,
-    )
-  }
-
-  // Open the ModelPickerModal
-  const openModelPicker = () => {
-    const app = getApp();
-    const plugin = getPlugin();
-    const settings = getSettings();
-
-    new ChooseModelModal(
-      app, 
-      (model: Model) => {
-        // Change model in the settings and save changes
-        settings.provider = model.provider;
-        settings.model = model.name; 
-        plugin.saveSettings();
-        
-        // Change the states
-        setSelectedModel(model.name); 
-        setCanUpload(model.capabilities.includes("vision"));
-        // Clean file list if model doesn't support images
-        if (!model.capabilities.includes("vision")) setSelectedFiles([]);
-        
-        return;
-      }
-    ).open();
+      setConversation,
+  })
   }
 
   // Open the AddContextModal
@@ -115,22 +82,22 @@ export default function Input({
       (note: TFile) => {
         setSelectedNotes((prev) => {
           // If no previous notes, create new array with the note
-          if (!prev) return [{path: note.path, basename: note.basename}];
+          if (!prev) return [note.path];
           // Check if note already exists in the list
-          const noteExists = prev.some((existingNote) => existingNote.path === note.path);
+          const noteExists = prev.some((existingNote) => existingNote === note.path);
           if (noteExists) return prev;
           // Add new note to existing array
-          return [...prev, {path: note.path, basename: note.basename}];
+          return [...prev, note.path];
         });
       }
     ).open();
   }
   // Removes a note from the selected notes
-  const removeNote = (toRemove: Attachment) => {
+  const removeNote = (toRemove: string) => {
     setSelectedNotes((prev) => {
       if (!prev) return [];
       
-      const filteredNotes = prev.filter((note) => note.path !== toRemove.path);
+      const filteredNotes = prev.filter((note) => note !== toRemove);
       return filteredNotes;
     });
   };
@@ -170,8 +137,8 @@ export default function Input({
         
         {/* Show selected notes and images */}
         {selectedNotes.map((note) => (
-          <div key={note.path} className="obsidian-agent__input__attachment-tag">
-            <span className="obsidian-agent__input__attachment-text">{note.basename}</span>
+          <div key={note} className="obsidian-agent__input__attachment-tag">
+            <span className="obsidian-agent__input__attachment-text">{note.split("/").pop()?.replace(".md", "")}</span>
             <button 
               onClick={() => removeNote(note)} 
               className="obsidian-agent__input__remove-attachment-button"
@@ -214,7 +181,7 @@ export default function Input({
 
       <div className="obsidian-agent__input__actions">
         <button 
-          onClick={openModelPicker} 
+          onClick={() => new ChooseModelModal().open()} 
           className="obsidian-agent__input__select-model-button"
         >
           <ChevronDown size={14}/>
@@ -226,8 +193,7 @@ export default function Input({
             <button
               onClick={() => fileInputRef.current?.click()}
               className="obsidian-agent__input__attach-image-button"
-              title={canUpload ? "Images" : "Image upload not supported by current model"}
-              disabled={!canUpload}
+              title="Attach an image"
             >
               <Image size={18} />
             </button>

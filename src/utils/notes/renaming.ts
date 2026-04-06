@@ -1,4 +1,4 @@
-import { getApp } from "src/plugin";
+import { getApp } from "src/main";
 
 // Append a number to a name if the file or the folder already exists
 export function getNextAvailableFileName(base: string, parentPath: string): string {

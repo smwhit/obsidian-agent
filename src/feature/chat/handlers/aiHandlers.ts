@@ -1,224 +1,156 @@
-import { TFile, Notice } from "obsidian";
-import { getApp, getSettings } from "src/plugin";
-import { 
-  exportMessage, 
-  removeMessagesAfterIndexN, 
-  removeLastNMessages, 
-  importConversation,
-} from "src/utils/chat/chatHistory";
-import { callAgent } from "src/backend/managers/agentRunner";
-import { callModel } from "src/backend/managers/modelRunner";
-import { Attachment, Message, ToolCall } from "src/types/chat";
+import { Notice, TFile } from "obsidian";
+
+import { getApp, getSettings } from "src/main";
+import { call } from "src/backend/modelRouter";
+import { exportMessage, removeMessagesAfterIndexN } from "src/utils/chat/chatHistory";
+
+import type { CallHandlerParams, Message } from "src/types/ai";
 
 
-// This function call callAgent and writes the new user and bot messages to the obsidian chat file 
-// If you are regenerating a message this will remove all messages that were generated after the regenerated user message
-export const handleCall = async (
-  chat: TFile,
-  messageIndex: number | null,
-  message: string,
-  attachments: Attachment[],
-  files: File[],
-  updateConversation: (value: Message[] | ((prev: Message[]) => Message[])) => void,
-  isRegeneration: boolean,
-) => {
+export const handleCall = async ({
+  activeChat,
+  conversation,
+  message,
+  messageIndex,
+  files = [],
+  attachments = [],
+  isRegeneration = false,
+  setConversation,
+}: CallHandlerParams) => {
   const settings = getSettings();
 
   // If regenerating, remove the messages after the regenerated message
-  if (isRegeneration && messageIndex !== null) {
-    // Rewrites the chat file from messages from 0 to n. If n is 0 empties the chat file
-    await removeMessagesAfterIndexN(chat, messageIndex);
-    // Update the conversation
-    updateConversation((prev) => prev.slice(0, messageIndex));
+  // Rewrites the chat file from messages from 0 to n. If n is 0 empties the chat file
+  if (isRegeneration && messageIndex) {
+    await removeMessagesAfterIndexN(activeChat, messageIndex);
+    setConversation((prev) => prev.slice(0, messageIndex));
   }
 
-  // If is the first message, generate a name for the chat file
-  if (settings.generateChatName && !isRegeneration) {
-    const conversation = await importConversation(chat);
-    if (conversation.length === 0) {
-      const app = getApp();
-  
-      const newName = await generateChatFileName(message, files);
-      if (newName) {
-        const newPath = chat.parent?.path + "/" + newName + ".md";
-  
-        await app.vault.rename(chat, newPath);
-        chat = app.vault.getFileByPath(newPath)!;
-      };
-    }
+  // If it is the first message, generate a name for the chat file
+  if (settings.generateChatName && !isRegeneration && conversation.length === 0) {
+    // Show in the chat a message 
+    activeChat = await generateChatFileName(message, files, attachments, activeChat);
   }
 
-  // Get the conversation before adding the new messages
-  const conversation = await importConversation(chat);
-
-  // Create the user message
+  // Add the user message to the conversation
   const userMessage: Message = {
-    sender: "user",
+    type: "user",
     content: message,
-    reasoning: "",
     attachments,
-    toolCalls: [],
-    processed: false,
+    processed: true,
   };
-  // Update the conversation with this new message
-  updateConversation((prev: Message[]) => [...prev, userMessage]);
-  // Export the user message into the chat file
-  exportMessage(userMessage, chat);
+  setConversation((prev: Message[]) => [...prev, userMessage]);
+  exportMessage(userMessage, activeChat);
 
-  // Create the model message
-  const tempMessage: Message = {
-    sender: "bot",
-    content: "",
-    reasoning: "",
-    attachments: [],
-    toolCalls: [],
-    processed: false,
-  };
-  // Update the conversation with this temp message
-  updateConversation((prev: Message[]) => [...prev, tempMessage]);
+  // Track messages added by the model for later export
+  const addedMessages: Message[] = [];
 
-  // Start the call to the agent
-  // The calls to the agent are in streaming mode
-  // We need to update the content of the tmp message
-  let accumulatedContent = "";
-  let accumulatedReasoning = "";
-  let accumulatedToolCalls: ToolCall[] = []
-  const updateMessage = (chunk: string, reasoning: string, toolCalls: ToolCall[]) => {
-    // Add upcoming chunks
-    if (chunk) accumulatedContent += chunk;
-    
-    // Add reasoning chunks
-    if (reasoning) accumulatedReasoning += `\n\n*${reasoning}*`;
+  const addMessage = (message: Message) => {
+    // Synchronous tracking for export
+    const lastTracked = addedMessages.at(-1);
+    if (lastTracked && !lastTracked.processed && lastTracked.type === message.type) {
+      lastTracked.content = (lastTracked.content || "") + (message.content || "");
+      if (message.processed) lastTracked.processed = true;
+    } else {
+      if (lastTracked && !lastTracked.processed) {
+        lastTracked.processed = true;
+      }
+      addedMessages.push({ ...message });
+    }
 
-    // Add upcoming toolcalls
-    if (toolCalls && toolCalls.length > 0) accumulatedToolCalls = [...accumulatedToolCalls, ...toolCalls];
+    // Update React state using prev to avoid stale closure
+    setConversation((prev: Message[]) => {
+      const last = prev.at(-1);
 
-    // Update the conversation with the upcoming chunks
-    updateConversation((prev: Message[]) => {
-      const update = [...prev];
-      const lastIndex = update.length - 1;
+      // Same type and unprocessed: append content
+      if (last && !last.processed && last.type === message.type) {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          ...last,
+          content: (last.content || "") + (message.content || ""),
+          processed: message.processed ?? false,
+        };
+        return updated;
+      }
 
-      update[lastIndex] = {
-        ...update[lastIndex],
-        content: accumulatedContent,
-        reasoning: accumulatedReasoning,
-        toolCalls: accumulatedToolCalls
-      };
-      return update;
+      // Previous is unprocessed but different type: finalize it, then add new
+      if (last && !last.processed) {
+        const updated = [...prev];
+        updated[updated.length - 1] = { ...last, processed: true };
+        return [...updated, { ...message }];
+      }
+
+      // Otherwise (last is processed, or is user/error): add as new message
+      return [...prev, { ...message }];
     });
   };
 
-  // Call
   let callError: string = "";
   try {
-    await callAgent(conversation, message, attachments, files, updateMessage);
+    await call({ prompt: message, files, attachments, conversation, addMessage });
   } catch (error) {
     callError = String(error);
-  };
+  }
 
-  // Check if the agent return something
-  const hasTools = accumulatedToolCalls && accumulatedToolCalls.length > 0;
-  
-  const somethingWentWrong = callError || (!accumulatedContent.trim() && !hasTools);
+  // Add error message if the call failed
+  if (callError) {
+    if (settings.debug) console.error(callError);
+    new Notice(callError, 5000);
 
-  let botMessage: Message | null = null;
-  let errorMessage: Message | null = null;
-  if (somethingWentWrong) {
-    // Clean up the accumulated content and tool calls
-    if (callError) {
-      if (getSettings().debug) console.error(callError);
-      new Notice (callError, 5000);
-      
-      accumulatedContent = "";
+    const errorMessage: Message = {
+      type: "error",
+      content: "*Something went wrong while processing the request.*",
+      processed: true,
+    };
+
+    setConversation((prev: Message[]) => {
+      const updated = [...prev];
+      const last = updated.at(-1);
+      if (last && !last.processed) {
+        updated[updated.length - 1] = errorMessage;
+      } else {
+        updated.push(errorMessage);
+      }
+      return updated;
+    });
+    exportMessage(errorMessage, activeChat);
+    return;
+  }
+
+  // Finalize any remaining unprocessed message
+  const lastTracked = addedMessages.at(-1);
+  if (lastTracked && !lastTracked.processed) {
+    lastTracked.processed = true;
+  }
+  setConversation((prev: Message[]) => {
+    const last = prev.at(-1);
+    if (last && !last.processed) {
+      const updated = [...prev];
+      updated[updated.length - 1] = { ...last, processed: true };
+      return updated;
     }
-    
-    // Create an error message to show on the chat, replacing the empty tmp message
-    errorMessage = {
-      sender: "error",
-      content: callError ? 
-        `${accumulatedContent}\n*Something went wrong while processing the request.*` : 
-        "*No answer was generated for the request.*",
-      reasoning: accumulatedReasoning,
-      attachments: [],
-      toolCalls: accumulatedToolCalls,
-      processed: true,
-    };
-
-    updateConversation((prev: Message[]) => {
-      const update = [...prev];
-      const lastIndex = update.length - 1;
-
-      update[lastIndex] = errorMessage!;
-      return update;
-    });
-
-    // Export the final bot message to the chat file
-    exportMessage(errorMessage, chat);
-
-  } else {
-    // Generate message in case the agent only executed tools
-    if (!accumulatedContent.trim() && hasTools) accumulatedContent = `*Tools executed successfully.*`;
-
-    botMessage = {
-      sender: "bot",
-      content: accumulatedContent,
-      reasoning: accumulatedReasoning,
-      attachments: [],
-      toolCalls: accumulatedToolCalls,
-      processed: true,
-    };
-
-    // Replace the temporary message in the conversation state with the final bot message
-    updateConversation((prev: Message[]) => {
-      const update = [...prev];
-      const lastIndex = update.length - 1;
-      update[lastIndex] = botMessage!;
-      return update;
-    });
-
-    // Export the final bot message to the chat file
-    exportMessage(botMessage, chat);
-  };
-
-  // Access the user message and change the processed flag to true
-  updateConversation((prev: Message[]) => {
-    const update = [...prev];
-    
-    const userMessageIndex = isRegeneration && messageIndex !== null
-      ? messageIndex
-      : update.findLastIndex((m) => m.sender === "user");
-
-    update[userMessageIndex] = {
-      ...update[userMessageIndex],
-      processed: true,
-    };
-    return update;
+    return prev;
   });
 
-  // Remove the user and bot/error messages and rewrite the user message with the porcessed flag set to true
-  await removeLastNMessages(chat, 2);
-
-  userMessage.processed = true;
-  exportMessage(userMessage, chat);
-  
-  if (errorMessage !== null) {
-    exportMessage(errorMessage, chat);
-  } else if (botMessage !== null ){
-    exportMessage(botMessage, chat);
+  // Export all model messages to the chat file
+  for (const msg of addedMessages) {
+    exportMessage(msg, activeChat);
   }
-}
+};
+
 
 // Function that generates a name for a chat file
-async function generateChatFileName(userMessage: string, images: File[]) {
-  const newName = await callModel(
-    "You have the task of generating a title for a user-bot chat based on the user message provided to you. The title should be short and descriptive, no more than four words.",
-    userMessage,
-    images,
-  );
-
-  const cleanedName = newName
-  .replace(/[*"\\/<>:|?]/g, "")
-  .trim();
+async function generateChatFileName(prompt: string, files: File[], attachments: string[], activeChat: TFile): Promise<TFile> {
+  const app = getApp();
   
-  return cleanedName;
+  prompt = "Generate a name for a chat file, no more than 4 words, based on the following prompt: \n" + prompt;
+  let generatedName = await call({ prompt, files, attachments });
+  if (!generatedName) generatedName = "Unable to generate name";
+
+  const newName = generatedName.replace(/[*"\\/<>:|?]/g, "").trim();
+  
+  const newPath = activeChat.parent?.path + "/" + newName + ".md";
+
+  await app.vault.rename(activeChat, newPath);
+  return app.vault.getFileByPath(newPath)!;
 }

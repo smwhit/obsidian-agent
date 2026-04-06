@@ -7,16 +7,17 @@ import {
   HarmBlockThreshold,
   ThinkingLevel,
 } from "@google/genai";
-import { getSettings } from "src/plugin";
-import { agentSystemPrompt } from "src/backend/managers/prompts/library";  
-import { callableFunctionDeclarations } from "src/backend/managers/functionRunner";
-import { DEFAULT_SETTINGS } from "src/settings/SettingsTab";
 
-export async function createGoogleClient(system: string | undefined = undefined) {
+import { getSettings } from "src/main";
+import { agentSystemPrompt } from "src/backend/shared/prompts";  
+import { callableFunctionDeclarations } from "src/backend/google/function";
+import { DEFAULT_SETTINGS } from "src/settings/settings";
+
+export async function createModel() {
   const settings = getSettings();
 
   // Initialize model and its configuration
-  let baseUrl = settings.baseUrl.trim();
+  let baseUrl = settings.googleBaseUrl.trim();
   if (!baseUrl) baseUrl = "https://generativelanguage.googleapis.com";
   
   const config: GoogleGenAIOptions = { 
@@ -35,17 +36,13 @@ export async function createGoogleClient(system: string | undefined = undefined)
   ];
 
   const generationConfig: GenerateContentConfig = {
-    systemInstruction: system ? system : agentSystemPrompt,
+    systemInstruction: agentSystemPrompt,
     safetySettings: safetySettings,
+    tools: [{ functionDeclarations: callableFunctionDeclarations }],
     thinkingConfig: {
       includeThoughts: true,
     },
   };
-
-  // Agent function declarations
-  if (!system) {
-    generationConfig.tools = [{ functionDeclarations: callableFunctionDeclarations }]
-  }
 
   // Special settings for Gemini 3 models
   if (settings.model.includes("3") && settings.thinkingLevel !== DEFAULT_SETTINGS.thinkingLevel) {
@@ -60,8 +57,5 @@ export async function createGoogleClient(system: string | undefined = undefined)
     generationConfig.maxOutputTokens = Number(settings.maxOutputTokens);
   }
 
-  return {
-    ai,
-    generationConfig,
-  };
+  return { ai, generationConfig };
 }

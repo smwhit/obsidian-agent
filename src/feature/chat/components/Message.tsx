@@ -1,13 +1,15 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import { Copy, Check, RefreshCcw } from "lucide-react";
 import { MarkdownRenderer, Component } from "obsidian";
-import { getApp } from "src/plugin";
+
+import { getApp } from "src/main";
 import { handleCall } from "src/feature/chat/handlers/aiHandlers";
 import Attachments from "src/feature/chat/ui/Attachments";
 import ToolCalls from "src/feature/chat/ui/ToolCalls";
 import ReasoningBlock from "src/feature/chat/ui/ReasoningBlock";
-import Input from "src/feature/chat/components/Input";
-import { MessageProps } from "src/types/chat";
+import ChatInput from "src/feature/chat/components/Input";
+import type { MessageProps } from "src/types/chat";
+
 
 export default function Message({
   index,
@@ -23,19 +25,20 @@ export default function Message({
   const componentRef = useRef<Component | null>(null);
 
   const handleRegenerate = async () => {
-    await handleCall(
-      activeChat!,
-      index - 1,
-      conversation[index - 1].content,
-      conversation[index - 1].attachments,
-      [],
+    await handleCall({
+      activeChat,
+      conversation,
+      message: conversation[index - 1].content!,
+      messageIndex: index - 1,
+      files: [],
+      attachments: conversation[index - 1].attachments,
+      isRegeneration: true,
       setConversation,
-      true,
-    )
+    })
   }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
+    navigator.clipboard.writeText(message.content || "");
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1000);
   }
@@ -51,7 +54,7 @@ export default function Message({
   
   useEffect(() => {
     const app = getApp();
-    if (!contentRef.current || message.sender === "user") return;
+    if (!contentRef.current || message.type === "user") return;
 
     // Render markdown via Obsidian after preprocessing    
     if (componentRef.current) {
@@ -69,7 +72,7 @@ export default function Message({
     const newComponent = new Component();
     componentRef.current = newComponent;
     
-    const processed = preprocess(message.content);
+    const processed = preprocess(message.content || "");
     MarkdownRenderer.render(app, processed, container, '', newComponent);
 
     // Cleanup
@@ -79,19 +82,20 @@ export default function Message({
         componentRef.current = null;
       }
     };
-  }, [message.content, message.sender, preprocess]);
+  }, [message.content, message.type, preprocess]);
 
-  if (message.sender === "user") {
+  if (message.type === "user") {
     if (isEditing) {
       return (
-        <Input
-          initialValue={message.content}
+        <ChatInput
           activeChat={activeChat}
-          editingMessageIndex={index}
+          initialValue={message.content}
+          attachments={message.attachments}
+          messageIndex={index}
+          conversation={conversation}
+          setConversation={setConversation}
           isRegeneration={true}
           setIsEditing={setIsEditing}
-          setConversation={setConversation}
-          attachments={message.attachments}
         />
       );
     }
@@ -106,7 +110,7 @@ export default function Message({
           className="obsidian-agent__chat-single-message__user-message"
           onClick={() => setIsEditing(prev => !prev)}
         >
-          {message.attachments.length > 0 && (
+          {message.attachments && message.attachments.length > 0 && (
             <Attachments attachments={message.attachments}/>
           )}
           <div className="obsidian-agent__chat-single-message__user-message-content">
@@ -116,20 +120,24 @@ export default function Message({
       </div>
     );
   }
-  
-  return (
-    <div className="obsidian-agent__chat-single-message__bot-message">
-      {/* Reasoning block */}
-      <ReasoningBlock 
-        reasoning={message.reasoning} 
-        isProcessed={message.processed}
+
+  if (message.type === "reasoning") {
+    return (
+      <ReasoningBlock
+        reasoning={message.content || ""} 
+        isProcessed={message.processed || false}
       />
-    
-      {/* Tool calls */}
-      {message.toolCalls.length > 0 && (
-        <ToolCalls toolCalls={message.toolCalls} />        
-      )}
-    
+    );
+  }
+
+  if (message.type === "tool") {
+    return (
+      <ToolCalls toolCall={message} />
+    );
+  }
+
+  return (
+    <div className="obsidian-agent__chat-single-message__bot-message">      
       {/* Message content */}
       <div 
         ref={contentRef}
@@ -139,7 +147,7 @@ export default function Message({
       </div>
 
       {/* Copy button and other actions */}
-      {message.content.trim() && (
+      {message.content && message.content.trim() && (
         <div>
           <button
             title="Copy"

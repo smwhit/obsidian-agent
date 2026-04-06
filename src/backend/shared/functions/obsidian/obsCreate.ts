@@ -1,60 +1,11 @@
-import { Type } from '@google/genai';
-import { getApp } from "src/plugin";
+import { getApp, getSettings } from "src/main";
 import { findMatchingFolder } from 'src/utils/notes/searching';
 import { getNextAvailableFileName } from "src/utils/notes/renaming";
 import { formatTags } from 'src/utils/notes/tags';
-import { writingSystemPrompt } from 'src/backend/managers/prompts/library';
-import { callModel } from 'src/backend/managers/modelRunner';
+import { writingSystemPrompt } from 'src/backend/shared/prompts';
+//import { generateGoogleResponse } from 'src/backend/google/call';
 
 
-export const createNoteFunctionDeclaration = {
-  name: "create_note",
-  description: "Create a note. Content can be generated with a topic or provided manually. If no name provided a default one will be used.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      topic: {
-        type: Type.STRING,
-        description: 'The topic of the note, what is going to be written about',
-        default: "",
-      },
-      name: {
-        type: Type.STRING,
-        description: 'The note name the user provided with markdown file extension .md',
-        default: "Generated note.md",
-      },
-      tags: {
-        type: Type.ARRAY,
-        description: 'The tags the user wants to add to the note, do not make them up',
-        items: { type: Type.STRING },
-        default: [],
-      },
-      context: {
-        type: Type.STRING,
-        description: 'Context the user provided to write the note',
-        default: "",
-      },
-      dirPath: {
-        type: Type.STRING,
-        description: 'The path of the directory where the note is going to be stored',
-        default: "",
-      },
-      content: {
-        type: Type.STRING,
-        description: 'Custom markdown content to use instead of generating',
-        default: "",
-      },
-      useLlm: {
-        type: Type.BOOLEAN,
-        description: 'Whether to use the LLM to generate the content.',
-        default: true,
-      },
-    },
-    required: [],
-  }
-}
-
-// Obsidian tool to write notes
 export async function createNote(
   topic: string = "",
   name: string = "Generated note.md",
@@ -65,7 +16,8 @@ export async function createNote(
   useLlm: boolean = true,
 ) {
   const app = getApp();
-  
+  const settings = getSettings();
+
   // Find the closest folder
   const matchedFolder = findMatchingFolder(dirPath);
   if (!matchedFolder) {
@@ -87,8 +39,8 @@ export async function createNote(
       const humanPrompt = `Write a note following this topic/instruction: ${topic}.`;
       
       try {
-        const response = await callModel(sysPrompt, humanPrompt, []);
-        content = response;
+        //const response = await generateGoogleResponse(settings.model, sysPrompt, humanPrompt);
+        //content = response;
 
         if (tags.length > 0) content = formatTags(tags) + "\n" + content
 

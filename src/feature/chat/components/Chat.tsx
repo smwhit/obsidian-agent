@@ -1,11 +1,14 @@
 import { useState, useEffect, useImperativeHandle, forwardRef } from "react";
+import { MessageSquareOff } from "lucide-react";
 import { TFile } from "obsidian";
-import Form from "src/feature/chat/components/Form";
-import History from "src/feature/chat/components/History";
-import Input from "src/feature/chat/components/Input";
+
 import { ensureActiveChat } from "src/feature/chat/handlers/chatHandlers";
 import { importConversation } from "src/utils/chat/chatHistory";
-import { Message } from "src/types/chat";
+import Form from "src/feature/chat/components/Form";
+import Input from "src/feature/chat/components/Input";
+import ChatMessage from "src/feature/chat/components/Message";
+import type { Message } from "src/types/ai";
+
 
 export interface ChatRef {
   getActiveChat: () => TFile | null;
@@ -13,11 +16,12 @@ export interface ChatRef {
   setActiveChat: (chat: TFile | null) => void;
 }
 
-const Chat = forwardRef<ChatRef>((props, ref) => {
+export const Chat = forwardRef<ChatRef>((props, ref) => {
   const [conversation, setConversation] = useState<Message[]>([]);
   const [activeChat, setActiveChat] = useState<TFile | null>(null);
   const [availableChats, setAvailableChats] = useState<TFile[]>([]);
 
+  // Expose methods to parent component
   useImperativeHandle(ref, () => ({
     getActiveChat: () => activeChat,
     getUpdateConversation: () => setConversation,
@@ -31,19 +35,16 @@ const Chat = forwardRef<ChatRef>((props, ref) => {
       setActiveChat(chat);
       setAvailableChats(availableChats);
     };
-  
     fetchData();
   }, []);
 
   // Executed when the active chat file changes
   useEffect(() => {
     if (!activeChat) return;
-  
     const loadConversation = async () => {
       const messages = await importConversation(activeChat);
       setConversation(messages);
     };
-  
     loadConversation();
   }, [activeChat]);
   
@@ -59,27 +60,33 @@ const Chat = forwardRef<ChatRef>((props, ref) => {
 
       <hr className="obsidian-agent__hr"/>
 
-      <History
-        activeChat={activeChat}
-        conversation={conversation}
-        setConversation={setConversation}
-      />
+      {conversation.length > 0 ? (
+        <div className="obsidian-agent__chat-messages">
+          {conversation.map((message, index) => (
+            <ChatMessage
+              key={index}
+              index={index}
+              message={message}
+              conversation={conversation}
+              setConversation={setConversation}
+              activeChat={activeChat}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="obsidian-agent__empty-chat">
+          <MessageSquareOff size={40}/>
+          <p>No messages have been sent. Send one to start the conversation.</p>
+        </div>
+      )}
 
       <hr className="obsidian-agent__hr"/>
       
       <Input
-        initialValue={""}
         activeChat={activeChat}
-        editingMessageIndex={null}
-        isRegeneration={false}
-        setIsEditing={null}
+        conversation={conversation}
         setConversation={setConversation}
-        attachments={[]}
       />
     </div>
   );
 });
-
-Chat.displayName = 'Chat';
-
-export default Chat;

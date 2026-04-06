@@ -1,12 +1,22 @@
 import { FunctionCall } from "@google/genai";
-import { createNote, createNoteFunctionDeclaration } from "src/backend/tools/obsidian/obsCreate";
-import { editNote, editNoteFunctionDeclaration } from "src/backend/tools/obsidian/obsEdit";
-import { readNote, readNoteFunctionDeclaration } from "src/backend/tools/obsidian/obsRead";
-import { createDir, createDirFunctionDeclaration } from "src/backend/tools/obsidian/obsDir";
-import { noteFiltering, noteFilteringFunctionDeclaration } from "src/backend/tools/obsidian/obsFilter";
-import { listFiles, listFilesFunctionDeclaration } from "src/backend/tools/obsidian/obsListing";
-import { vaultSearch, vaultSearchFunctionDeclaration } from "src/backend/tools/obsidian/obsSearch";
-import { webSearch, webSearchFunctionDeclaration } from "src/backend/tools/webSearch";
+
+import { createNote } from "src/backend/shared/functions/obsidian/obsCreate";
+import { editNote } from "src/backend/shared/functions/obsidian/obsEdit";
+import { readNote } from "src/backend/shared/functions/obsidian/obsRead";
+import { createDir } from "src/backend/shared/functions/obsidian/obsDir";
+import { noteFiltering } from "src/backend/shared/functions/obsidian/obsFilter";
+import { listFiles } from "src/backend/shared/functions/obsidian/obsListing";
+import { vaultSearch } from "src/backend/shared/functions/obsidian/obsSearch";
+import { webSearch } from "src/backend/shared/functions/webSearch";
+
+import { createNoteFunctionDeclaration } from "src/backend/google/schemas/obsidian/obsCreate";
+import { editNoteFunctionDeclaration } from "src/backend/google/schemas/obsidian/obsEdit";
+import { readNoteFunctionDeclaration } from "src/backend/google/schemas/obsidian/obsRead";
+import { createDirFunctionDeclaration } from "src/backend/google/schemas/obsidian/obsDir";
+import { noteFilteringFunctionDeclaration } from "src/backend/google/schemas/obsidian/obsFilter";
+import { listFilesFunctionDeclaration } from "src/backend/google/schemas/obsidian/obsListing";
+import { vaultSearchFunctionDeclaration } from "src/backend/google/schemas/obsidian/obsSearch";
+import { webSearchFunctionDeclaration } from "src/backend/google/schemas/webSearch";
 
 
 export const callableFunctionDeclarations = [

@@ -1,5 +1,5 @@
 import { TFile, TFolder, Notice } from "obsidian";
-import { getApp, getSettings } from "src/plugin";
+import { getApp, getSettings } from "src/main";
 import { formatTagsForChat } from "src/utils/notes/tags";
 import { getTime, getTimeId } from "src/utils/formatting/timeFormat";
 
@@ -10,7 +10,6 @@ async function createChatFolder(): Promise<TFolder | null> {
   
   try {
     return await app.vault.createFolder(settings.chatsFolder);
-  
   } catch (error) {
     const errorMsg = "Error creating chat folder: " + error;
     new Notice(errorMsg, 5000);

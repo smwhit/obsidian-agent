@@ -1,5 +1,5 @@
 import { Menu, Editor, MarkdownView } from "obsidian";
-import { ObsidianAgentPlugin } from "src/plugin";
+import ObsidianAgentPlugin from "src/main";
 import { ensureActiveChat } from "src/feature/chat/handlers/chatHandlers";
 import { handleCall } from "src/feature/chat/handlers/aiHandlers";
 import { Attachment } from "src/types/chat";

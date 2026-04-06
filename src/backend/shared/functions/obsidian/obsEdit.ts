@@ -1,56 +1,13 @@
-import { Type } from "@google/genai";
 import { ChangeObject, diffLines } from "diff";
 import { App, TFile } from 'obsidian';
-import { getApp, getSettings } from "src/plugin";
+import { getApp, getSettings } from "src/main";
 import { findClosestFile } from 'src/utils/notes/searching';
 import { formatTags } from 'src/utils/notes/tags';
-import { writingSystemPrompt } from 'src/backend/managers/prompts/library';
-import { callModel } from 'src/backend/managers/modelRunner';
+import { writingSystemPrompt } from 'src/backend/shared/prompts';
+//import { generateGoogleResponse } from 'src/backend/google/call';
 import { DiffReviewModal } from "src/feature/modals/DiffReviewModal";
 
 
-export const editNoteFunctionDeclaration = {
-  name: "edit_note",
-  description: "Write, replace and edit content of a note. Can use LLM or not, supports tags and context. Specify the note name or detect the active note if no name provided.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      fileName: {
-        type: Type.STRING,
-        description: "The name or path of the note to edit. Without the markdown extension .md",
-        default: "",
-      },
-      activeNote: {
-        type: Type.BOOLEAN,
-        description: "If no filename provided set to true to read the active note",
-        default: false,
-      },
-      newContent: {
-        type: Type.STRING,
-        description: "New content or instructions to apply to the note",
-      },
-      useLlm: {
-        type: Type.BOOLEAN,
-        description: "Whether to use the LLM to generate content for the note",
-        default: true,
-      },
-      tags: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
-        description: "Tags to add in the note, do not make them up",
-        default: [],
-      },
-      context: {
-        type: Type.STRING,
-        description: "Additional context for the LLM to use when editing",
-        default: "",
-      },
-    },
-    required: ["newContent"],
-  },
-}
-
-// Obsidian tool to update or write on existing notes
 export async function editNote(
   fileName: string = "",
   activeNote: boolean = false,
@@ -107,9 +64,9 @@ export async function editNote(
       `Return the full updated markdown note. Do not remove any existing content unless specified (including links and paths).`;
 
     try {
-      const response = await callModel(sysPrompt, humanPrompt, []);
-      if (typeof response !== "string") throw new Error("Invalid response from LLM");
-      updatedContent = response;
+      //const response = await generateGoogleResponse(settings.model, humanPrompt, sysPrompt);
+      //if (typeof response !== "string") throw new Error("Invalid response from LLM");
+      //updatedContent = response;
 
       if (tags.length > 0) updatedContent = formatTags(tags) + '\n' + updatedContent;
 

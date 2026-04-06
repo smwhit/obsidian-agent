@@ -5,31 +5,14 @@ import {
   HarmCategory,
   HarmBlockThreshold,
   GenerateContentConfig,
-  Part, 
-  Type,
+  Part,
   ApiError,
   GenerateContentResponse,
 } from '@google/genai';
-import { getSettings } from 'src/plugin';
-import { prepareModelInputs } from 'src/backend/managers/prompts/inputs';
+import { getSettings } from 'src/main';
+import { prepareModelInputs } from 'src/backend/google/input';
 
 
-export const webSearchFunctionDeclaration = {
-  name: "web_search",
-  description: "Search someting in the web",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      query: {
-        type: Type.STRING,
-        description: "Query for the web search",
-      },
-    },
-    required: ["query"],
-  },
-};
-
-// Do a web search using Google GenAI
 export async function webSearch(
   query: string,
 ) {
@@ -52,7 +35,7 @@ export async function webSearch(
     safetySettings: safetySettings,
     tools: [{ googleSearch: {} }],
   };
-  const inputs: Part[] = await prepareModelInputs(query, []);
+  const inputs: Part[] = await prepareModelInputs(query, [], []);
 
   // Call the model
   let response: GenerateContentResponse | undefined;

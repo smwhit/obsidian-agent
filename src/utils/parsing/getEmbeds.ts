@@ -1,5 +1,5 @@
 import { TFile, FileSystemAdapter } from "obsidian";
-import { getApp } from "src/plugin";
+import { getApp } from "src/main";
 import path from "path";
 import fs from "fs";
 

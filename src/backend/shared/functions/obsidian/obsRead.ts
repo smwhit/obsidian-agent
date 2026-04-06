@@ -1,34 +1,11 @@
-import { Type } from '@google/genai';
 import { TFile } from 'obsidian';
-import { getApp, getSettings } from "src/plugin";
+import { getApp, getSettings } from "src/main";
 import { findClosestFile } from 'src/utils/notes/searching';
 import { getEmbeds } from 'src/utils/parsing/getEmbeds';
 import { removeImagesFromNote, extractImagesFromNote } from "src/utils/parsing/imageParse";
-import { callModel } from 'src/backend/managers/modelRunner';
+//import { callModel } from 'src/backend/google/managers/modelRunner';
 
 
-export const readNoteFunctionDeclaration = {
-  name: "read_note",
-  description: "Reads the content of a note in Obsidian by name or by detecting the currently active note. The content itself is not needed as input.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      fileName: {
-        type: Type.STRING,
-        description: "The name or path of the note to read",
-        default: "",
-      },
-      activeNote: {
-        type: Type.BOOLEAN,
-        description: "If no filename provided set to true to read the active note",
-        default: false,
-      },
-    },
-    required: [],
-  },
-}
-
-// Obsidian tool to read notes
 export async function readNote(
   fileName: string = "",
   activeNote: boolean = false,
@@ -83,28 +60,28 @@ export async function readNote(
         images.push(...base64ToFiles);
       }
       
-      if (images && images.length > 0) {
-        const imageDescriptions = await callModel(
-          "", 
-          "Return a list of captions for the following image(s):",
-          images, // TODO: Handle this error
-        );
-        if (typeof imageDescriptions !== "string") throw new Error("Invalid response from LLM");  
+      // if (images && images.length > 0) {
+      //   const imageDescriptions = await callModel(
+      //     "", 
+      //     "Return a list of captions for the following image(s):",
+      //     images, // TODO: Handle this error
+      //   );
+      //   if (typeof imageDescriptions !== "string") throw new Error("Invalid response from LLM");  
         
-        // Remove images from the content
-        content = await removeImagesFromNote(content);
+      //   // Remove images from the content
+      //   content = await removeImagesFromNote(content);
         
-        return { 
-          success: true, 
-          response: {
-            content: "\n" + content, 
-            imageDescriptions,
-          }
-        };
+      //   return { 
+      //     success: true, 
+      //     response: {
+      //       content: "\n" + content, 
+      //       imageDescriptions,
+      //     }
+      //   };
 
-      } else {
-        content = await removeImagesFromNote(content);
-      }
+      // } else {
+      //   content = await removeImagesFromNote(content);
+      // }
     
     } else {
       content = await removeImagesFromNote(content);

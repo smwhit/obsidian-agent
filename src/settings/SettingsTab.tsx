@@ -1,45 +1,11 @@
 import { PluginSettingTab, App, Setting, DropdownComponent, TFolder } from "obsidian";
-import { ObsidianAgentPlugin, getApp, getPlugin } from "src/plugin";
-import { ChooseModelModal } from "src/feature/modals/ChooseModelModal";
 import { ThinkingLevel } from "@google/genai";
 
-// Interface for the settings of the plugin
-export interface AgentSettings {
-  provider: string;
-  model: string;
-  googleApiKey: string;
-  baseUrl: string;
-  temperature: string;
-  thinkingLevel: string;
-  maxOutputTokens: string;
-  rules: string;
-  chatsFolder: string;
-  maxHistoryTurns: number;
-  generateChatName: boolean;
-  readImages: boolean;
-  reviewChanges: boolean;
-  debug: boolean;
-}
+import ObsidianAgentPlugin from "src/main";
+import { ChooseModelModal } from "src/feature/modals/ChooseModelModal";
 
-// Default settings for the plugin
-export const DEFAULT_SETTINGS: AgentSettings = {
-  provider: "google",
-  model: "gemini-2.5-flash",
-  googleApiKey: "",
-  baseUrl: "",
-  temperature: "Default",
-  thinkingLevel: "Default",
-  maxOutputTokens: "Default",
-  rules: "",
-  chatsFolder: "Chats",
-  maxHistoryTurns: 2,
-  generateChatName: true,
-  readImages: true,
-  reviewChanges: true,
-  debug: false,
-};
+import { DEFAULT_SETTINGS } from "./settings";
 
-// Settings tab class
 export class AgentSettingsTab extends PluginSettingTab {
   plugin: ObsidianAgentPlugin;
 
@@ -53,27 +19,20 @@ export class AgentSettingsTab extends PluginSettingTab {
     let { containerEl } = this;
     containerEl.empty();
 
-    // Language model settings
+    // LLM Picker
     new Setting(containerEl)
       .setName("Model")
       .setDesc("Select the Google language model to use.")
       .addButton((button) => {
-        button.setButtonText(this.plugin.settings.model || "Choose model");
-        button.onClick(() => {
-          const app = getApp();
-          const plugin = getPlugin();
-          new ChooseModelModal(app, (model) => {
-            this.plugin.settings.model = model.name;
-            this.plugin.settings.provider = model.provider;
-            plugin.saveSettings();
-            button.setButtonText(model.name);
-          }).open();
-        });
+        button.setButtonText(this.plugin.settings.provider + "/" + this.plugin.settings.model || "Choose model");
+        button.onClick(() => new ChooseModelModal().open());
         return button;
       });
 
-    // API keys settings
-    // GOOGLE
+    
+    // Google config
+    new Setting(containerEl).setName("Google configuration").setHeading();
+
     const googleSetting = new Setting(containerEl)
       .setName("Google api key")
       .setDesc("Enter your Google API key.");
@@ -106,66 +65,72 @@ export class AgentSettingsTab extends PluginSettingTab {
     baseUrlSetting.addText((text) => {
       text
         .setPlaceholder("https://generativelanguage.googleapis.com")
-        .setValue(this.plugin.settings.baseUrl)
+        .setValue(this.plugin.settings.googleBaseUrl)
         .onChange(async (value) => {
-          this.plugin.settings.baseUrl = value;
+          this.plugin.settings.googleBaseUrl = value;
           await this.plugin.saveSettings();
         });
     });
+    
+    // Ollama config
+    new Setting(containerEl).setName("Ollama configuration").setHeading();
 
-    // LLM settings
-    new Setting(containerEl)
-    .setName("Temperature")
-    .setDesc("Higher values make output more random, while lower values make it more focused and deterministic. Min: 0, Max: 2.")
-    .addText((text) =>
-      text
-        .setValue(String(this.plugin.settings.temperature))
-        .onChange(async (value) => {
-          const num = Number(value);
-          if (Number.isNaN(num) || num > 2 || num < 0) {
-            this.plugin.settings.temperature = DEFAULT_SETTINGS.temperature;
-            await this.plugin.saveSettings();
-          } else {
-            this.plugin.settings.temperature = value;
-            await this.plugin.saveSettings();
-          }
-        })
-    );
+
+    // LLM configuration
+    new Setting(containerEl).setName("Model configuration").setHeading();
 
     new Setting(containerEl)
-    .setName("Max output tokens")
-    .setDesc("Set the maximum number of tokens the model can generate in its response.")
-    .addText((text) =>
-      text
-        .setValue(String(this.plugin.settings.maxOutputTokens))
-        .onChange(async (value) => {
-          const num = Number(value);
-          if (Number.isNaN(num) || num < 0) {
-            this.plugin.settings.maxOutputTokens = DEFAULT_SETTINGS.maxOutputTokens;
-            await this.plugin.saveSettings();
-          } else {
-            this.plugin.settings.maxOutputTokens = value;
-            await this.plugin.saveSettings();
-          }
-        })
-    );
+      .setName("Temperature")
+      .setDesc("Higher values make output more random, while lower values make it more focused and deterministic.")
+      .addText((text) =>
+        text
+          .setValue(String(this.plugin.settings.temperature))
+          .onChange(async (value) => {
+            const num = Number(value);
+            if (Number.isNaN(num) || num > 2 || num < 0) {
+              this.plugin.settings.temperature = DEFAULT_SETTINGS.temperature;
+              await this.plugin.saveSettings();
+            } else {
+              this.plugin.settings.temperature = value;
+              await this.plugin.saveSettings();
+            }
+          })
+      );
 
     new Setting(containerEl)
-    .setName("Thinking level")
-    .setDesc("Set the level of reasoning the model should use. This setting only applies to Gemini 3 models, others use default reasoning level.")
-      .addDropdown((dropdown: DropdownComponent) => {
-        dropdown.addOption("Low", "Low");
-        dropdown.addOption("High", "High");
-        dropdown.addOption("Default", "Default");
-        
-        dropdown
-        .setValue(this.plugin.settings.thinkingLevel)
-        .onChange(async (value) => {
-          this.plugin.settings.thinkingLevel = value as ThinkingLevel;
-          await this.plugin.saveSettings();
-        });
-      }
-    );
+      .setName("Max output tokens")
+      .setDesc("Set the maximum number of tokens the model can generate in its response.")
+      .addText((text) =>
+        text
+          .setValue(String(this.plugin.settings.maxOutputTokens))
+          .onChange(async (value) => {
+            const num = Number(value);
+            if (Number.isNaN(num) || num < 0) {
+              this.plugin.settings.maxOutputTokens = DEFAULT_SETTINGS.maxOutputTokens;
+              await this.plugin.saveSettings();
+            } else {
+              this.plugin.settings.maxOutputTokens = value;
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Thinking level")
+      .setDesc("Set the level of reasoning the model should use. This setting only applies to Gemini 3 models, others use default reasoning level.")
+        .addDropdown((dropdown: DropdownComponent) => {
+          dropdown.addOption("Low", "Low");
+          dropdown.addOption("High", "High");
+          dropdown.addOption("Default", "Default");
+          
+          dropdown
+          .setValue(this.plugin.settings.thinkingLevel)
+          .onChange(async (value) => {
+            this.plugin.settings.thinkingLevel = value as ThinkingLevel;
+            await this.plugin.saveSettings();
+          });
+        }
+      );
     
     // Agent rules
     const rulesSetting = new Setting(containerEl)
@@ -187,27 +152,27 @@ export class AgentSettingsTab extends PluginSettingTab {
       text.inputEl.classList.add("obsidian-agent__settings-rules-textarea");
     });
 
+
     // History settings
     new Setting(containerEl).setName('History settings').setHeading();
 
-
     // Chat history folder
     new Setting(containerEl)
-    .setName("Chat history folder")
-    .setDesc("Select the folder where your chat histories will be saved.")
-    .addDropdown((dropdown: DropdownComponent) => {
-      const folders = this.app.vault.getAllLoadedFiles().filter(file => file instanceof TFolder && !file.isRoot());
-      folders.forEach(folder => {
-        dropdown.addOption(folder.path, folder.name);
-      });
-      
-      dropdown
-        .setValue(this.plugin.settings.chatsFolder)
-        .onChange(async (value) => {
-          this.plugin.settings.chatsFolder = value;
-          await this.plugin.saveSettings();
+      .setName("Chat history folder")
+      .setDesc("Select the folder where your chat histories will be saved.")
+      .addDropdown((dropdown: DropdownComponent) => {
+        const folders = this.app.vault.getAllLoadedFiles().filter(file => file instanceof TFolder && !file.isRoot());
+        folders.forEach(folder => {
+          dropdown.addOption(folder.path, folder.name);
         });
-    });
+        
+        dropdown
+          .setValue(this.plugin.settings.chatsFolder)
+          .onChange(async (value) => {
+            this.plugin.settings.chatsFolder = value;
+            await this.plugin.saveSettings();
+          });
+      });
 
     // Max turns settings
     new Setting(containerEl)
@@ -283,25 +248,25 @@ export class AgentSettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-    .setName("Reset settings")
-    .setDesc("Reset settings to default values. Push the button reopen the Settings tab see the applied changes.")
-    .addButton((button) => {
-      button.setButtonText("Reset");
-      button.onClick(async () => {
-        this.plugin.settings.model = DEFAULT_SETTINGS.model;
-        this.plugin.settings.temperature = DEFAULT_SETTINGS.temperature;
-        this.plugin.settings.thinkingLevel = DEFAULT_SETTINGS.thinkingLevel;
-        this.plugin.settings.maxOutputTokens = DEFAULT_SETTINGS.maxOutputTokens;
-        this.plugin.settings.rules = DEFAULT_SETTINGS.rules;
-        this.plugin.settings.chatsFolder = DEFAULT_SETTINGS.chatsFolder;
-        this.plugin.settings.maxHistoryTurns = DEFAULT_SETTINGS.maxHistoryTurns;
-        this.plugin.settings.generateChatName = DEFAULT_SETTINGS.generateChatName;
-        this.plugin.settings.readImages = DEFAULT_SETTINGS.readImages;
-        this.plugin.settings.reviewChanges = DEFAULT_SETTINGS.reviewChanges;
-        this.plugin.settings.debug = DEFAULT_SETTINGS.debug;
-        await this.plugin.saveSettings();
+      .setName("Reset settings")
+      .setDesc("Reset settings to default values. Push the button reopen the Settings tab see the applied changes.")
+      .addButton((button) => {
+        button.setButtonText("Reset");
+        button.onClick(async () => {
+          this.plugin.settings.model = DEFAULT_SETTINGS.model;
+          this.plugin.settings.temperature = DEFAULT_SETTINGS.temperature;
+          this.plugin.settings.thinkingLevel = DEFAULT_SETTINGS.thinkingLevel;
+          this.plugin.settings.maxOutputTokens = DEFAULT_SETTINGS.maxOutputTokens;
+          this.plugin.settings.rules = DEFAULT_SETTINGS.rules;
+          this.plugin.settings.chatsFolder = DEFAULT_SETTINGS.chatsFolder;
+          this.plugin.settings.maxHistoryTurns = DEFAULT_SETTINGS.maxHistoryTurns;
+          this.plugin.settings.generateChatName = DEFAULT_SETTINGS.generateChatName;
+          this.plugin.settings.readImages = DEFAULT_SETTINGS.readImages;
+          this.plugin.settings.reviewChanges = DEFAULT_SETTINGS.reviewChanges;
+          this.plugin.settings.debug = DEFAULT_SETTINGS.debug;
+          await this.plugin.saveSettings();
+        });
+        return button;
       });
-      return button;
-    });
   }
 }

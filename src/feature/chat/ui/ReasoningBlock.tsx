@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from "react";
 import { ChevronRight } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { MarkdownRenderer, Component } from "obsidian";
-import { getApp } from "src/plugin";
-import { ReasoningBlock, ReasoningProps } from "src/types/chat";
+
+import { getApp } from "src/main";
+import type { ReasoningBlock, ReasoningProps } from "src/types/chat";
+
 
 export default function Reasoning({ 
   reasoning, 
