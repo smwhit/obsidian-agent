@@ -28,7 +28,7 @@ It features a user-friendly UI, inspired by other agentic apps.
 
 ## 🧠 Getting Started
 
-1. Download from **Community Plugins** in Obsidian or clone the repository inside your `~/vault/.obsidian/plugins/` folder.
+1. Clone the repository inside your `~/vault/.obsidian/plugins/` folder.
 2. Enable the plugin from Obsidian's settings panel.
 3. Add the corresponding Google API key in the plugin's settings panel.
 
