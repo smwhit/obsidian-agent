@@ -102,7 +102,7 @@ export class ObsidianAgentPlugin extends Plugin {
   // Method that opens the agent chat view
   async activateAgentChatView(): Promise<void> {
     const { workspace } = this.app;
-    let leaf: WorkspaceLeaf | null = null;
+    let leaf: WorkspaceLeaf | null;
 
     const existingLeaves = workspace.getLeavesOfType(VIEW_TYPE_AGENT);
     if (existingLeaves.length > 0) {

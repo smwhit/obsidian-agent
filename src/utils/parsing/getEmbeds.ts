@@ -15,15 +15,14 @@ export function getEmbeds(file: TFile) {
   if (embeddedFiles && embeddedFiles.length > 0) {
     const images: File[] = [];
 
-    let vaultPath = "";
     const adapter = app.vault.adapter;
 
-    if (adapter instanceof FileSystemAdapter) {
-      vaultPath = adapter.getBasePath();
-    } else {
+    if (!(adapter instanceof FileSystemAdapter)) {
       console.error("Vault adapter is not a FileSystemAdapter. Cannot determine vault path.");
       return [];
     }
+
+    const vaultPath = adapter.getBasePath();
 
     for (const embedFile of embeddedFiles) {
       // Ignore non-image embeds

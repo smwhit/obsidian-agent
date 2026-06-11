@@ -81,16 +81,16 @@ export async function callAgent(
     // Stream completed tool calls and their results as they finish
     const toolCallsTask = (async () => {
       for await (const call of run.toolCalls) {
-        let response: Record<string, any>;
+        let response: Record<string, unknown>;
         try {
-          response = (await call.output) as Record<string, any>;
+          response = (await call.output) as Record<string, unknown>;
         } catch {
           response = { error: (await call.error) ?? "Tool call failed." };
         }
 
         updateAiMessage("", "", [{
           name: call.name,
-          args: (call.input ?? {}) as Record<string, any>,
+          args: (call.input ?? {}) as Record<string, unknown>,
           response: response ?? {},
         }]);
       }

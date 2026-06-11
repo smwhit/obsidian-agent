@@ -68,7 +68,7 @@ export async function editNote(
 
   // Read the file
   const oldContent = await app.vault.read(matchedFile);
-  let updatedContent = '';
+  let updatedContent: string;
 
   // If the user do not want to generate content replace directly
   if (!useLlm && (newContent || tags.length > 0)) {
