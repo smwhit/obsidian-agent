@@ -1,32 +1,25 @@
-import { Type } from "@google/genai";
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 import { findMatchingFolder } from 'src/utils/notes/searching'
 import { getFolderStructure } from 'src/utils/vault/vaultStructure';
 
 
-export const listFilesFunctionDeclaration = {
-  name: "list_files",
-  description: "List files and directories of a directory.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      dirPath: {
-        type: Type.STRING,
-        description: "The path of the directory to list files from",
-      },
-      limit: {
-        type: Type.INTEGER,
-        description: "The maximum number of files and directories to list",
-        default: 10,
-      },
-    },
-    required: ["dirPath"],
-  },
-};
+export const listFilesTool = tool(
+  async ({ dirPath, limit }) => listFiles(dirPath, limit),
+  {
+    name: "list_files",
+    description: "List files and directories of a directory.",
+    schema: z.object({
+      dirPath: z.string().describe("The path of the directory to list files from"),
+      limit: z.number().int().optional().describe("The maximum number of files and directories to list"),
+    }),
+  }
+);
 
 // List a tree of files and directories in a directory
 export async function listFiles(
   dirPath: string, 
-  limit: number = 10,
+  limit = 10,
 ) {
   // Find the matching folder if the path is not absolute    
   const matchingFolder = findMatchingFolder(dirPath);
@@ -38,7 +31,7 @@ export async function listFiles(
   const tree = {
     type: 'folder',
     path: matchingFolder.path,
-    childrens: getFolderStructure(matchingFolder, limit)
+    children: getFolderStructure(matchingFolder, limit)
   };
 
   return {

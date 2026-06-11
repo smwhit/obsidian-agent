@@ -1,91 +1,69 @@
-import { 
-  GoogleGenAI,
-  GoogleGenAIOptions,
-  SafetySetting,
-  HarmCategory,
-  HarmBlockThreshold,
-  GenerateContentConfig,
-  Part, 
-  Type,
-  ApiError,
-  GenerateContentResponse,
-} from '@google/genai';
-import { getSettings } from 'src/plugin';
-import { prepareModelInputs } from 'src/backend/managers/prompts/inputs';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { HumanMessage } from "@langchain/core/messages";
+import { getSettings } from "src/plugin";
 
+// Gemini's API rejects requests that combine built-in tools (like googleSearch)
+// with function declarations, and the agent always registers the vault function
+// tools. So instead of binding googleSearch to the agent's model, we expose web
+// search as a regular tool: when the agent calls it, we spin up a fresh,
+// isolated ChatGoogleGenerativeAI instance with ONLY googleSearch bound (no
+// vault tools) and run the query through that, then hand the grounded result
+// back to the agent as the tool's response.
+export const googleWebSearchTool = tool(
+  async ({ query }) => googleWebSearch(query),
+  {
+    name: "web_search",
+    description: "Searches the web for up-to-date information using Google Search.",
+    schema: z.object({
+      query: z.string().describe("The search query."),
+    }),
+  }
+);
 
-export const webSearchFunctionDeclaration = {
-  name: "web_search",
-  description: "Search someting in the web",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      query: {
-        type: Type.STRING,
-        description: "Query for the web search",
-      },
-    },
-    required: ["query"],
-  },
-};
+interface GroundingSource {
+  title?: string;
+  url?: string;
+}
 
-// Do a web search using Google GenAI
-export async function webSearch(
-  query: string,
-) {
+async function googleWebSearch(query: string) {
   const settings = getSettings();
 
-  // Initialize model and its configuration
-  const config: GoogleGenAIOptions = { apiKey: settings.googleApiKey, apiVersion: "v1beta" };
-  const ai = new GoogleGenAI(config);
+  if (!settings.googleApiKey.trim()) {
+    return { success: false, response: "Set your Google API key in the plugin settings before using web search." };
+  }
 
-  const safetySettings: SafetySetting[] = [
-    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-  ];
-
-  const generationConfig: GenerateContentConfig = {
-    systemInstruction: "You are a web search tool that provides relevant information based on user queries.",
-    safetySettings: safetySettings,
-    tools: [{ googleSearch: {} }],
-  };
-  const inputs: Part[] = await prepareModelInputs(query, []);
-
-  // Call the model
-  let response: GenerateContentResponse | undefined;
   try {
-    response = await ai.models.generateContent({
+    const searchModel = new ChatGoogleGenerativeAI({
       model: settings.model,
-      contents: inputs,
-      config: generationConfig,
-    });
-  } catch (error) {
-    if (error instanceof ApiError) {
-      if (error.status === 403) return { success: false, response: "API quota exceeded. Please check your Google Cloud account."};
-      if (error.status === 503) return { success: false, response: "API service overloaded. Please try again later." }
-      return { success: false, response: `API Error: ${error.message}` };
-    }
-    return { success: false, response: `Unexpected Error: ${error}` };
-  }
-  
-  if (!response || !response.text || !response.candidates) return { success: false, response: "Error: No results found."};
-  
-  // Extract sources from grounding metadata
-  const groundingChunks = response.candidates[0].groundingMetadata?.groundingChunks || [];
-  const sources: Array<{ title?: string, url?: string }> = [];
-  for (const source of groundingChunks) {
-    const web = source.web;
-    if (web) sources.push(web);
-  }
+      apiKey: settings.googleApiKey,
+      baseUrl: settings.baseUrl.trim() || undefined,
+    }).bindTools([{ googleSearch: {} }]);
 
-  return {
-    success: true,
-    response: {
-      search: response.text,
-      sources: sources,
-    },
+    const result = await searchModel.invoke([new HumanMessage(query)]);
+
+    // Grounding metadata (sources backing the search result) rides along on
+    // additional_kwargs, the langchain integration doesn't model it explicitly.
+    const groundingChunks = (result.additional_kwargs?.groundingMetadata as
+      { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } | undefined
+    )?.groundingChunks ?? [];
+
+    const sources: GroundingSource[] = groundingChunks
+      .map((chunk) => chunk.web)
+      .filter((web): web is { uri?: string; title?: string } => Boolean(web))
+      .map((web) => ({ title: web.title, url: web.uri }));
+
+    if (!result.text) {
+      return { success: false, response: "No results found." };
+    }
+
+    return {
+      success: true,
+      response: { search: result.text, sources },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, response: `Web search failed: ${message}` };
   }
-};
+}

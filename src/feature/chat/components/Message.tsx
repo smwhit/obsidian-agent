@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Copy, Check, RefreshCcw } from "lucide-react";
 import { MarkdownRenderer, Component } from "obsidian";
 import { getApp } from "src/plugin";
@@ -7,6 +7,7 @@ import Attachments from "src/feature/chat/ui/Attachments";
 import ToolCalls from "src/feature/chat/ui/ToolCalls";
 import ReasoningBlock from "src/feature/chat/ui/ReasoningBlock";
 import Input from "src/feature/chat/components/Input";
+import { convertWikiLinksToMarkdown } from "src/utils/formatting/obsidianLinks";
 import { MessageProps } from "src/types/chat";
 
 export default function Message({
@@ -35,20 +36,11 @@ export default function Message({
   }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
+    void navigator.clipboard.writeText(message.content);
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1000);
+    activeWindow.setTimeout(() => setCopied(false), 1000);
   }
 
-  // Handle Obsidian links
-  const preprocess = useCallback((content: string): string => {
-    // Convert [[link]] to obsidian://open?file=link
-    return content.replace(".md]]", "]]").replace(/\[\[([^\]]+)\]\]/g, (_, p1) => {
-      const encoded = encodeURIComponent(p1.trim());
-      return `[${p1.trim()}](obsidian://open?file=${encoded})`;
-    });
-  }, []);
-  
   useEffect(() => {
     const app = getApp();
     if (!contentRef.current || message.sender === "user") return;
@@ -59,17 +51,13 @@ export default function Message({
       componentRef.current = null;
     }
 
-    while (contentRef.current.firstChild) {
-      contentRef.current.removeChild(contentRef.current.firstChild);
-    }
-
-    const container = document.createElement("div");
-    contentRef.current.appendChild(container);
+    contentRef.current.empty();
+    const container = contentRef.current.createDiv();
     
     const newComponent = new Component();
     componentRef.current = newComponent;
     
-    const processed = preprocess(message.content);
+    const processed = convertWikiLinksToMarkdown(message.content);
     MarkdownRenderer.render(app, processed, container, '', newComponent);
 
     // Cleanup
@@ -79,7 +67,7 @@ export default function Message({
         componentRef.current = null;
       }
     };
-  }, [message.content, message.sender, preprocess]);
+  }, [message.content, message.sender]);
 
   if (message.sender === "user") {
     if (isEditing) {
@@ -151,7 +139,7 @@ export default function Message({
 
           <button
             title="Regenerate"
-            onClick={handleRegenerate}
+            onClick={() => void handleRegenerate()}
             className="obsidian-agent__button-icon"
           >
             <RefreshCcw size={16}/>

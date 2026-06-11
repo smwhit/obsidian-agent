@@ -1,27 +1,19 @@
-import { SafetySetting } from "@google/generative-ai"; 
+// Supported LangChain chat model providers. The user picks one in settings
+// and types the model name manually (no curated model list anymore).
+export type Provider = "google" | "anthropic" | "openai" | "ollama";
 
-export interface Model {
-  provider: "google",
-  name: string,
-  capabilities: Array<"vision" | "reasoning" | "websearch">,
-  description: string,
+// A provider/model-name pair, used by the model picker modal and the
+// "switch-model" command to update settings together as a unit.
+export interface SelectedModel {
+  provider: Provider;
+  name: string;
 }
 
-export interface ModelConfig {
-  modelName: string;
-  streaming: boolean;
-  apiKey?: string;
-  safetySettings?: SafetySetting[];
-}
-
-export interface AiMessageInput {
-  messages: Array<
-    { 
-      "role": "user", 
-      "content": Array<
-        {"type": "text", "text": string} |  
-        {"type": "image_url", "image_url": {"url": string}}
-      >; 
-    }
-  > 
+// A curated suggestion shown in the model picker. Model names are still
+// typed manually in settings, this list only seeds the picker with
+// well-known options per provider.
+export interface SuggestedModel {
+  provider: Provider;
+  name: string;
+  description: string;
 }

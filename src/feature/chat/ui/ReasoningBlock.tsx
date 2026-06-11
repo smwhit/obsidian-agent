@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { ChevronRight } from "lucide-react";
 import { MarkdownRenderer, Component } from "obsidian";
 import { getApp } from "src/plugin";
+import { convertWikiLinksToMarkdown } from "src/utils/formatting/obsidianLinks";
 import { ReasoningBlock, ReasoningProps } from "src/types/chat";
 
 export default function Reasoning({ 
@@ -27,16 +28,6 @@ export default function Reasoning({
     t = t.replace(/\n{3,}/g, "\n\n");
   
     return t.trim();
-  };
-
-  // Handle Obsidian links
-  const preprocess = (content: string): string => {
-    if (!content) return "";
-    // Convert [[link]] to obsidian://open?file=link
-    return content.replace(".md]]", "]]").replace(/\[\[([^\]]+)\]\]/g, (_, p1) => {
-      const encoded = encodeURIComponent(p1.trim());
-      return `[${p1.trim()}](obsidian://open?file=${encoded})`;
-    });
   };
 
   // Return reasoning blocks
@@ -85,7 +76,7 @@ export default function Reasoning({
     }
 
     const cleaned = cleanGoogleReasoning(reasoning);
-    const pre = preprocess(cleaned);
+    const pre = convertWikiLinksToMarkdown(cleaned);
 
     if (!isProcessed) {
       // Render streaming reasoning while the final structure is not ready

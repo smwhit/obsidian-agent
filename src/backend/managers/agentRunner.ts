@@ -1,18 +1,17 @@
-import {
-  GoogleGenAI,
-  GenerateContentConfig,
-  GenerateContentResponse,
-  Chat,
-  Content,
-  Part,
-  ApiError,
-} from "@google/genai";
+import { createAgent } from "langchain";
+import { HumanMessage } from "@langchain/core/messages";
+import { ClientTool, ServerTool } from "@langchain/core/tools";
 import { getSettings } from "src/plugin";
-import { Message, Attachment, ToolCall } from "src/types/chat";
-import { prepareModelInputs, buildChatHistory } from "src/backend/managers/prompts/inputs";
-import { executeFunction } from "src/backend/managers/functionRunner";
-import { createGoogleClient } from "src/backend/managers/googleClient";
+import { Attachment, Message, ToolCall } from "src/types/chat";
+import { buildChatHistory, prepareModelInputs } from "src/backend/managers/prompts/inputs";
+import { agentSystemPrompt } from "src/backend/managers/prompts/library";
+import { vaultTools } from "src/backend/managers/functionRunner";
+import { buildChatModel, getNativeWebSearchTool, translateModelError } from "src/backend/managers/modelFactory";
+import { googleWebSearchTool } from "src/backend/tools/webSearch";
 
+// Agent loop turn cap (model call <-> tool call cycles). createAgent/LangGraph
+// aborts with a clear error past this depth, replacing the old manual guard.
+const RECURSION_LIMIT = 25;
 
 // Function that calls the agent with chat history and tools binded
 export async function callAgent(
@@ -24,178 +23,82 @@ export async function callAgent(
 ): Promise<void> {
   const settings = getSettings();
 
-  // Initialize model and its configuration
-  const { ai, generationConfig } = await createGoogleClient();
-
-  // Build chat
-  const chatHistory = conversation.length > 0 ? await buildChatHistory(conversation) : [];  
-  const chat: Chat = ai.chats.create({
-    model: settings.model,
-    history: chatHistory,
-    config: generationConfig,
-  });
-
-  // Prepare user inputs
-  let fullUserMessage: string = message;
-  if (attachments.length > 0) {
-    fullUserMessage += `\n###\nAttached Obsidian notes: `
-    for (const note of attachments) {
-      fullUserMessage += `\n${note.path}`;
-    }
-    fullUserMessage += `\n###\n`
-  }
-  const input: Part[] = await prepareModelInputs(fullUserMessage, files);
-  
-  const executedFunctionIds = new Set<string>();
-  await sendMessageToChat(
-    1, 
-    ai,
-    settings.model,
-    generationConfig,
-    chat, 
-    chatHistory,
-    input, 
-    updateAiMessage, 
-    executedFunctionIds
-  );
-}
-
-
-// Sends the message to the chat history and process the response
-async function sendMessageToChat(
-  turn: number,
-  ai: GoogleGenAI,
-  model: string,
-  generationConfig: GenerateContentConfig,
-  chat: Chat,
-  originalHistory: Content[],
-  input: Part[], 
-  updateAiMessage: (m: string, r: string, t: ToolCall[]) => void,
-  executedFunctionIds: Set<string>,
-): Promise<void> {
-  if (turn > 5) {
-    throw new Error("Maximum tool execution depth reached. This maximum number of turns is set to avoid infinite loops.");
-  }
-
   try {
-    const stream = await chat.sendMessageStream({ message: input });
+    const model = buildChatModel();
+    const webSearchTool = getNativeWebSearchTool(settings.provider);
+    // Gemini can't bind googleSearch alongside the vault function tools, so it
+    // gets a dedicated tool that runs the search through a separate, isolated model.
+    const searchTools: (ClientTool | ServerTool)[] = webSearchTool
+      ? [webSearchTool]
+      : settings.provider === "google"
+        ? [googleWebSearchTool]
+        : [];
 
-    // Prcess response
-    for await (const chunk of stream) {
-      // Manage reasoning
-      let allThoughs: string[] = [];
-      const candidates = chunk.candidates || [];
+    const agent = createAgent({
+      model,
+      tools: [...vaultTools, ...searchTools],
+      systemPrompt: settings.rules ? `${agentSystemPrompt}\n${settings.rules}` : agentSystemPrompt,
+    });
 
-      if (chunk.candidates) {
-        for (const cand of candidates) {
-          const parts = cand.content?.parts || [];
-          for (const part of parts) {
-            if (part.thought && part.text) {
-              allThoughs.push(part.text);
+    const history = conversation.length > 0 ? await buildChatHistory(conversation) : [];
+
+    // Append attached note paths so the model knows which notes were referenced
+    let fullUserMessage = message;
+    if (attachments.length > 0) {
+      fullUserMessage += `\n###\nAttached Obsidian notes: `;
+      for (const note of attachments) {
+        fullUserMessage += `\n${note.path}`;
+      }
+      fullUserMessage += `\n###\n`;
+    }
+
+    const content = await prepareModelInputs(fullUserMessage, files);
+    const userMessage = new HumanMessage({ content });
+
+    const run = await agent.streamEvents(
+      { messages: [...history, userMessage] },
+      { version: "v3", recursionLimit: RECURSION_LIMIT },
+    );
+
+    // Stream the assistant's text and reasoning deltas as they're generated
+    const messagesTask = (async () => {
+      for await (const msg of run.messages) {
+        await Promise.all([
+          (async () => {
+            for await (const token of msg.text) {
+              updateAiMessage(token, "", []);
             }
-          }
+          })(),
+          (async () => {
+            for await (const token of msg.reasoning) {
+              updateAiMessage("", token, []);
+            }
+          })(),
+        ]);
+      }
+    })();
+
+    // Stream completed tool calls and their results as they finish
+    const toolCallsTask = (async () => {
+      for await (const call of run.toolCalls) {
+        let response: Record<string, any>;
+        try {
+          response = (await call.output) as Record<string, any>;
+        } catch {
+          response = { error: (await call.error) ?? "Tool call failed." };
         }
-      }
 
-      // Update the message with the chunk
-      updateAiMessage(chunk.text || "", allThoughs.join("\n"), []);
-    
-      // Execute function calls if any
-      if (chunk.functionCalls && chunk.functionCalls.length > 0) {
-        await manageFunctionCall(turn, ai, model, generationConfig, originalHistory, input, chunk, updateAiMessage, executedFunctionIds);
-        continue;
+        updateAiMessage("", "", [{
+          name: call.name,
+          args: (call.input ?? {}) as Record<string, any>,
+          response: response ?? {},
+        }]);
       }
-    };
+    })();
+
+    await Promise.all([messagesTask, toolCallsTask]);
+    await run.output;
   } catch (error) {
-    if (error instanceof ApiError) {
-      if (error.status === 403) throw new Error("API key not set, or isn't valid.")
-      if (error.status === 429) throw new Error("API quota exceeded. Please check your Google Cloud account.");
-      if (error.status === 503) throw new Error("API service overloaded. Please try again later.");
-      throw new Error(`API Error: ${error.message}`);
-    }
-    throw new Error(`Unexpected Error: ${String(error)}`);
+    throw translateModelError(error);
   }
-}
-
-
-// Execute the function with the provided arguments and return the responses to the agent
-async function manageFunctionCall(
-  turn: number,
-  ai: GoogleGenAI,
-  model: string,
-  generationConfig: GenerateContentConfig,
-  originalHistory: Content[],
-  userInput: Part[],
-  chunk: GenerateContentResponse,
-  updateAiMessage: (m: string, r: string, t: ToolCall[]) => void,
-  executedFunctionIds: Set<string>,
-): Promise<void> {
-  const settings = getSettings();
-
-  if (!chunk.candidates || chunk.candidates.length === 0) return;
-  const cand = chunk.candidates[0];
-  if (!cand) return;
-    
-  // Extract function call
-  const parts: Part[] = cand.content?.parts || [];
-  const fcParts = parts.filter(p => !!p.functionCall);
-  if (fcParts.length === 0) return;
-
-  // One function execution at a time
-  const fcPartCandidate = fcParts[0];
-  const funcCall = fcPartCandidate.functionCall!;
-  if (!funcCall || !funcCall.name) return;
-
-  // Add executed function data to avoid double executions (this calls do not have id property)
-  const fId = funcCall.name + JSON.stringify(funcCall.args || {});
-  if (executedFunctionIds.has(fId)) return;
-  executedFunctionIds.add(fId);
-    
-  const response = await executeFunction(funcCall);
-
-  // Update the AI message with the function response
-  updateAiMessage("", "", [{
-    name: funcCall.name,
-    args: funcCall.args,
-    response: response,
-  }]);
-
-  // Create input parts
-  const functionResponsePart: Part = {
-    functionResponse: {
-      name: funcCall.name,
-      response: response,
-    }
-  };
-
-  // The model function call Content
-  const modelContent: Content = cand.content!;
-  const userContent: Content = {
-    role: "user",
-    parts: userInput,
-  };
-
-  const newHistory = [...originalHistory, userContent, modelContent];
-
-  // Create a new chat with the updated history
-  const newChat: Chat = ai.chats.create({
-    model: model,
-    history: newHistory,
-    config: generationConfig,
-  })
-
-  const nextInput: Part[] = [ functionResponsePart ]
-
-  // Call again the agent with the newHistory
-  await sendMessageToChat(
-    turn+1, 
-    ai, 
-    model, 
-    generationConfig, 
-    newChat, 
-    newHistory, 
-    nextInput, 
-    updateAiMessage, 
-    executedFunctionIds
-  );
 }

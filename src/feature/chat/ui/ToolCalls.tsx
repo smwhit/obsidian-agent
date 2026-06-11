@@ -2,6 +2,20 @@ import { useState } from "react";
 import { Code, ChevronRight, Copy, Check } from "lucide-react";
 import type { ToolCallsProps } from "src/types/chat";
 
+// Tool responses sometimes arrive as JSON-encoded strings (e.g. "{\"success\":true}")
+// rather than already-parsed objects. Parse those before pretty-printing so the
+// dropdown shows readable, indented JSON instead of a single escaped line.
+function formatToolPayload(payload: unknown): string {
+  if (typeof payload === "string") {
+    try {
+      return JSON.stringify(JSON.parse(payload), null, 2);
+    } catch {
+      return payload;
+    }
+  }
+  return JSON.stringify(payload, null, 2);
+}
+
 export default function ToolCalls({ toolCalls }: ToolCallsProps) {
   const [openIndexes, setOpenIndexes] = useState<number[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
@@ -12,12 +26,12 @@ export default function ToolCalls({ toolCalls }: ToolCallsProps) {
     );
   };
 
-  const handleCopyResponse = (toolCallIndex: number, response: any) => {
-    const text = JSON.stringify(response, null, 2);
-    navigator.clipboard.writeText(text);
+  const handleCopyResponse = (toolCallIndex: number, response: unknown) => {
+    const text = formatToolPayload(response);
+    void navigator.clipboard.writeText(text);
     const key = `${toolCallIndex}-response`;
     setCopiedIndex(key);
-    setTimeout(() => setCopiedIndex(null), 2000);
+    activeWindow.setTimeout(() => setCopiedIndex(null), 2000);
   }
 
   return (
@@ -62,7 +76,7 @@ export default function ToolCalls({ toolCalls }: ToolCallsProps) {
                   </div>
                 )}
 
-                {toolCall.response && (Object.keys(toolCall.response).length > 0 || toolCall.response.length > 0) && (
+                {toolCall.response && Object.keys(toolCall.response).length > 0 && (
                   <div className="obsidian-agent__tool-call__args">
                     <div className="obsidian-agent__tool-call__result-header">
                       Response:
@@ -82,7 +96,7 @@ export default function ToolCalls({ toolCalls }: ToolCallsProps) {
                       </button>
                     </div>
                     <pre className="obsidian-agent__tool-call__result-pre">
-                      {JSON.stringify(toolCall.response, null, 2)}
+                      {formatToolPayload(toolCall.response)}
                     </pre>
                   </div>
                 )}

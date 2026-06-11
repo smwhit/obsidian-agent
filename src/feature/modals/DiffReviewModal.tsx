@@ -230,9 +230,9 @@ export class DiffReviewModal extends Modal {
   private onCloseCallback: (finalContent: string, finalDiff: ChangeObject<string>[]) => void;
   private oldContent: string;
   private newContent: string;
-  private callbackCalled: boolean = false;
+  private callbackCalled = false;
   
-  public finalContent: string = "";
+  public finalContent = "";
   public finalDiff: ChangeObject<string>[] = [];
 
   constructor(
@@ -253,11 +253,9 @@ export class DiffReviewModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     this.root = createRoot(contentEl);
-    
-    this.modalEl.style.width = '60%';
-    this.modalEl.style.maxWidth = '1200px';
-    this.modalEl.style.height = '85%';
-    this.modalEl.style.maxHeight = '800px';
+
+    this.modalEl.addClass("obsidian-agent__diff-review-modal");
+    this.contentEl.addClass("obsidian-agent");
     
     const handleConfirm = (finalContent: string, finalDiff: ChangeObject<string>[]) => {
       if (this.callbackCalled) return;

@@ -3,9 +3,8 @@ import EventEmitter from 'events';
 import { ChatView, VIEW_TYPE_AGENT } from "src/feature/chat/View";
 import { ChooseModelModal } from 'src/feature/modals/ChooseModelModal';
 import { AgentSettings, DEFAULT_SETTINGS, AgentSettingsTab } from "src/settings/SettingsTab";
-import { Model } from 'src/types/ai';
+import { SelectedModel } from 'src/types/ai';
 import { registerEditorMenuItems } from 'src/feature/menu/editorMenu';
-import { DiffReviewModal } from './feature/modals/DiffReviewModal';
 
 let pluginInstance: ObsidianAgentPlugin;
 
@@ -16,7 +15,6 @@ export class ObsidianAgentPlugin extends Plugin {
 
   // Method that loads the plugin
   async onload() {
-    pluginInstance = this;
     setPlugin(this);
 
     // Add settings tab
@@ -31,7 +29,7 @@ export class ObsidianAgentPlugin extends Plugin {
 
     // Add sidebar ribon icon that shows the view
     this.addRibbonIcon('brain-cog', 'Chat with Agent', () => {
-      this.activateAgentChatView();
+      void this.activateAgentChatView();
     });
 
     // Hotkeys
@@ -43,10 +41,11 @@ export class ObsidianAgentPlugin extends Plugin {
         const plugin = getPlugin();
         const settings = getSettings();
         
-        new ChooseModelModal(app, (model: Model) => {
-          // Change model in the settings and save changes
-          settings.model = model.name; 
-          plugin.saveSettings();
+        new ChooseModelModal(app, (selected: SelectedModel) => {
+          // Change provider and model in the settings and save changes
+          settings.provider = selected.provider;
+          settings.model = selected.name;
+          void plugin.saveSettings();
           return;
         }).open();
       },
@@ -78,9 +77,9 @@ export class ObsidianAgentPlugin extends Plugin {
     if (leaves.length === 0) {
       let leaf = this.app.workspace.getRightLeaf(false);
   
-      // Si no existe un leaf, créalo explícitamente
+      // If no leaf exists yet, force-create one
       if (!leaf) {
-        leaf = this.app.workspace.getRightLeaf(true); // crea uno si no hay
+        leaf = this.app.workspace.getRightLeaf(true);
       }
   
       if (leaf) {
@@ -121,7 +120,7 @@ export class ObsidianAgentPlugin extends Plugin {
   }
 
   // Method that unloads the plugin
-  async onunload() {}
+  onunload() {}
 }
 
 // Function that returns the app property of the Plugin class

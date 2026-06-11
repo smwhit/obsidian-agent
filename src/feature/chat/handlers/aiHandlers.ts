@@ -44,7 +44,7 @@ export const handleCall = async (
   
         await app.vault.rename(chat, newPath);
         chat = app.vault.getFileByPath(newPath)!;
-      };
+      }
     }
   }
 
@@ -109,12 +109,12 @@ export const handleCall = async (
   };
 
   // Call
-  let callError: string = "";
+  let callError = "";
   try {
     await callAgent(conversation, message, attachments, files, updateMessage);
   } catch (error) {
     callError = String(error);
-  };
+  }
 
   // Check if the agent return something
   const hasTools = accumulatedToolCalls && accumulatedToolCalls.length > 0;
@@ -178,7 +178,7 @@ export const handleCall = async (
 
     // Export the final bot message to the chat file
     exportMessage(botMessage, chat);
-  };
+  }
 
   // Access the user message and change the processed flag to true
   updateConversation((prev: Message[]) => {

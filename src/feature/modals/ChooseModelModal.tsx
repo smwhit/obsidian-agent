@@ -1,68 +1,72 @@
 import { FuzzySuggestModal, App, FuzzyMatch } from 'obsidian';
 import { getSettings } from 'src/plugin';
-import { allAvailableModels } from 'src/settings/models';
-import { Model } from 'src/types/ai';
+import { suggestedModels } from 'src/settings/models';
+import { Provider, SelectedModel, SuggestedModel } from 'src/types/ai';
 
-export class ChooseModelModal extends FuzzySuggestModal<Model> {
-  private onChoose: (model: Model) => void;
+// Color shown next to each suggestion, one per provider
+const providerColorMap: Record<Provider, string> = {
+  google: "#7895F9",
+  anthropic: "#D97757",
+  openai: "#74AA9C",
+  ollama: "#CCCCCC",
+};
+
+const providerLabelMap: Record<Provider, string> = {
+  google: "Google",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  ollama: "Ollama",
+};
+
+// Lets the user pick a provider + model name from a curated list of
+// suggestions. Picking an item only seeds the settings fields — the user
+// can still freely edit the model name afterwards.
+export class ChooseModelModal extends FuzzySuggestModal<SuggestedModel> {
+  private onChoose: (selected: SelectedModel) => void;
   protected activeModel: string;
-  protected availableModels: Model[];
+  protected suggestions: SuggestedModel[];
 
-  constructor(app: App, onChoose: (model: Model) => void) {
+  constructor(app: App, onChoose: (selected: SelectedModel) => void) {
     super(app)
-    const settings = getSettings(); 
+    const settings = getSettings();
     this.onChoose = onChoose;
     this.activeModel = settings.model;
-    this.availableModels = allAvailableModels;
+    this.suggestions = suggestedModels;
   }
 
-  protected formatModelName(model: Model, isActive: boolean): string {
-    let name = model.name;
-    if (isActive) name += " (current)";
-    return name;
+  getItems(): SuggestedModel[] {
+    return this.suggestions;
   }
 
-  getItems(): Model[] {
-    return this.availableModels;
+  getItemText(item: SuggestedModel): string {
+    return `${providerLabelMap[item.provider]} ${item.name}`;
   }
 
-  getItemText(item: Model): string {
-    return item.name;
-  }
-
-  onChooseItem(item: Model): void {
-    this.onChoose(item);
+  onChooseItem(item: SuggestedModel): void {
+    this.onChoose({ provider: item.provider, name: item.name });
     this.close();
   }
 
-  renderSuggestion(modelMatch: FuzzyMatch<Model>, el: HTMLElement): void {
+  renderSuggestion(modelMatch: FuzzyMatch<SuggestedModel>, el: HTMLElement): void {
     const { item: model } = modelMatch;
     el.empty();
-  
-    // Color per provider
-    const providerColorMap: Record<string, string> = {
-      google: "#7895F9",
-    };
-    const color = providerColorMap[model.provider.toLowerCase()] || "#CCCCCC";
-  
+
+    const color = providerColorMap[model.provider] || "#CCCCCC";
+
     const wrapper = el.createDiv({ cls: "obsidian-agent__model-modal__suggestion-wrapper" });
-  
+
     // Color circle
-    const colorCircle = wrapper.createDiv({ cls: "obsidian-agent__model-modal__color-circle", attr: { style: `background: ${color}` } });
+    wrapper.createDiv({ cls: "obsidian-agent__model-modal__color-circle", attr: { style: `background: ${color}` } });
 
     // Text container
     const textContainer = wrapper.createDiv({ cls: "obsidian-agent__model-modal__text-container" });
-  
+
     const nameEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__name" });
     nameEl.setText(model.name + (model.name === this.activeModel ? " (current)" : ""));
-  
-    let capabilities = "text, " + model.capabilities.join(", ")
-    if (!model.capabilities || model.capabilities.length < 1) {
-      capabilities = "text-only"
-    } 
-    const capsEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__info-bold" });
-    capsEl.setText(`Capabilities: ${capabilities}`);
-  
+
+    const providerEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__info-bold" });
+    providerEl.setText(`Provider: ${providerLabelMap[model.provider]}`);
+
     const descEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__info" });
     descEl.setText(`${model.description}`);
   }

@@ -32,24 +32,24 @@ const Chat = forwardRef<ChatRef>((props, ref) => {
       setAvailableChats(availableChats);
     };
   
-    fetchData();
+    void fetchData();
   }, []);
 
   // Executed when the active chat file changes
   useEffect(() => {
     if (!activeChat) return;
-  
+
     const loadConversation = async () => {
       const messages = await importConversation(activeChat);
       setConversation(messages);
     };
-  
-    loadConversation();
+
+    void loadConversation();
   }, [activeChat]);
   
 
   return (
-    <div className="obsidian-agent__chat-main__container">
+    <div className="obsidian-agent obsidian-agent__chat-main__container">
       <Form
         activeChat={activeChat}
         setActiveChat={setActiveChat}

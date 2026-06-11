@@ -1,11 +1,7 @@
-import { 
-  Part,
-  ApiError,
-  GenerateContentResponse,
-} from "@google/genai";
-import { getSettings } from "src/plugin";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { prepareModelInputs } from "src/backend/managers/prompts/inputs";
-import { createGoogleClient } from "src/backend/managers/googleClient";
+import { agentSystemPrompt } from "src/backend/managers/prompts/library";
+import { buildChatModel, translateModelError } from "src/backend/managers/modelFactory";
 
 
 // Function that calls the llm model without chat history and tools binded
@@ -14,31 +10,18 @@ export async function callModel(
   user: string,
   files: File[],
 ): Promise<string> {
-  const settings = getSettings();
+  const model = buildChatModel();
+  const content = await prepareModelInputs(user, files);
 
-  // Initialize model and its configuration
-  const { ai, generationConfig } = await createGoogleClient(system);
-
-  const inputs: Part[] = await prepareModelInputs(user, files);
-
-  // Call the model
-  let response: GenerateContentResponse | undefined;
   try {
-    response = await ai.models.generateContent({
-      model: settings.model,
-      contents: inputs,
-      config: generationConfig,
-    });
-  } catch (error) {
-    if (error instanceof ApiError) {
-      if (error.status === 403) throw new Error("API key not set, or isn't valid.")
-      if (error.status === 429) throw new Error("API quota exceeded. Please check your Google Cloud account.");
-      if (error.status === 503) throw new Error("API service overloaded. Please try again later.");
-      throw new Error(`API Error: ${error.message}`);
-    }
-    throw new Error(`Unexpected Error: ${String(error)}`);
-  }
+    const response = await model.invoke([
+      new SystemMessage(system || agentSystemPrompt),
+      new HumanMessage({ content }),
+    ]);
 
-  if (!response) throw new Error("No message generated.");
-  return response.text || "";
+    return response.text;
+
+  } catch (error) {
+    throw translateModelError(error);
+  }
 }

@@ -38,8 +38,8 @@ export class DeleteChatModal extends Modal {
     app: App,
     onConfirm: () => void,
     chatName: string,
-    confirmButtonText: string = "Delete",
-    cancelButtonText: string = "Cancel"
+    confirmButtonText = "Delete",
+    cancelButtonText = "Cancel"
   ) {
     super(app);
     this.onConfirm = onConfirm;
@@ -52,6 +52,7 @@ export class DeleteChatModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
+    this.contentEl.addClass("obsidian-agent");
     this.root = createRoot(contentEl);
     const handleConfirm = () => {
       this.onConfirm();

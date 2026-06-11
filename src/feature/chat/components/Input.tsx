@@ -5,10 +5,20 @@ import { getApp, getPlugin, getSettings } from "src/plugin";
 import { handleCall } from "src/feature/chat/handlers/aiHandlers";
 import { AddContextModal } from "src/feature/modals/AddContextModal";
 import { ChooseModelModal } from "src/feature/modals/ChooseModelModal";
-import { allAvailableModels } from "src/settings/models";
 import { Attachment, InputProps } from "src/types/chat";
-import { Model } from "src/types/ai";
+import { SelectedModel } from "src/types/ai";
 import { AgentSettings } from "src/settings/SettingsTab";
+
+// Returns the credential the active provider needs to send a message.
+// Ollama doesn't use an API key, it relies on its base URL being reachable.
+function getActiveProviderCredential(settings: AgentSettings): string {
+  switch (settings.provider) {
+    case "google": return settings.googleApiKey?.trim() ?? "";
+    case "anthropic": return settings.anthropicApiKey?.trim() ?? "";
+    case "openai": return settings.openaiApiKey?.trim() ?? "";
+    case "ollama": return settings.ollamaBaseUrl?.trim() ?? "";
+  }
+}
 
 export default function Input({
   initialValue,
@@ -20,45 +30,41 @@ export default function Input({
   attachments,
 }: InputProps) {
   const settings = getSettings();
-  const apiKey = settings.googleApiKey?.trim();
-  
+  const credential = getActiveProviderCredential(settings);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [message, setMessage] = useState<string>(initialValue);
-  const canSend = message.trim() && activeChat && apiKey;
+  const canSend = message.trim() && activeChat && credential;
 
-  const [selectedModel, setSelectedModel] = useState<string>(getSettings().model);
+  const [selectedProvider, setSelectedProvider] = useState<string>(settings.provider);
+  const [selectedModel, setSelectedModel] = useState<string>(settings.model);
   const [selectedNotes, setSelectedNotes] = useState<Attachment[]>(attachments);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [canUpload, setCanUpload] = useState<boolean>(false);
+  const [canUpload, setCanUpload] = useState<boolean>(settings.modelSupportsImages);
 
   useEffect(() => {
     const plugin = getPlugin();
-  
+
     const handleSettingsUpdate = (newSettings: AgentSettings) => {
+      setSelectedProvider(newSettings.provider);
       setSelectedModel(newSettings.model);
-      setCanUpload(
-        allAvailableModels.find(m => m.name === newSettings.model)?.capabilities.includes("vision") ?? false
-      );
+      setCanUpload(newSettings.modelSupportsImages);
+      // Clean file list if the model no longer supports images
+      if (!newSettings.modelSupportsImages) setSelectedFiles([]);
     };
-  
+
     plugin.settingsEmitter.on("settings-updated", handleSettingsUpdate);
-  
+
     // Cleanup
     return () => {
       plugin.settingsEmitter.off("settings-updated", handleSettingsUpdate);
     };
   }, []);
-  
-  useEffect(() => {
-    // Find the model in the list of available models and check if can upload images or not
-    const model: Model = allAvailableModels.find(model => model.name === selectedModel)!;
-    setCanUpload(model.capabilities.includes("vision"));
-  }, [selectedModel])
 
   // Disable or not the button
   const getButtonTitle = () => {
-    if (!apiKey) return "Set an API key";
+    if (!credential) return settings.provider === "ollama" ? "Set the Ollama base URL" : "Set an API key";
     if (!message.trim()) return "Write something";
     return "Send message";
   };
@@ -89,19 +95,17 @@ export default function Input({
     const settings = getSettings();
 
     new ChooseModelModal(
-      app, 
-      (model: Model) => {
-        // Change model in the settings and save changes
-        settings.provider = model.provider;
-        settings.model = model.name; 
-        plugin.saveSettings();
-        
+      app,
+      (selected: SelectedModel) => {
+        // Change provider and model in the settings and save changes
+        settings.provider = selected.provider;
+        settings.model = selected.name;
+        void plugin.saveSettings();
+
         // Change the states
-        setSelectedModel(model.name); 
-        setCanUpload(model.capabilities.includes("vision"));
-        // Clean file list if model doesn't support images
-        if (!model.capabilities.includes("vision")) setSelectedFiles([]);
-        
+        setSelectedProvider(selected.provider);
+        setSelectedModel(selected.name);
+
         return;
       }
     ).open();
@@ -205,7 +209,7 @@ export default function Input({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              handleSendWithState();
+              void handleSendWithState();
             }
           }}
           className="obsidian-agent__input__textarea"
@@ -218,7 +222,7 @@ export default function Input({
           className="obsidian-agent__input__select-model-button"
         >
           <ChevronDown size={14}/>
-          {selectedModel}
+          {selectedProvider}:{selectedModel}
         </button>
         
         <div className="obsidian-agent__input__right-actions">
@@ -243,7 +247,7 @@ export default function Input({
           </div>
           <button
             className="obsidian-agent__input__submit_button"
-            onClick={handleSendWithState}
+            onClick={() => void handleSendWithState()}
             title={getButtonTitle()}
             disabled={!canSend}
           >

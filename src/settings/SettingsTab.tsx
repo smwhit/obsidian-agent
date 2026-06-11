@@ -1,13 +1,17 @@
-import { PluginSettingTab, App, Setting, DropdownComponent, TFolder } from "obsidian";
+import { PluginSettingTab, App, Setting, DropdownComponent, TextComponent, TFolder } from "obsidian";
 import { ObsidianAgentPlugin, getApp, getPlugin } from "src/plugin";
 import { ChooseModelModal } from "src/feature/modals/ChooseModelModal";
-import { ThinkingLevel } from "@google/genai";
+import { Provider, SelectedModel } from "src/types/ai";
 
 // Interface for the settings of the plugin
 export interface AgentSettings {
-  provider: string;
+  provider: Provider;
   model: string;
+  modelSupportsImages: boolean;
   googleApiKey: string;
+  anthropicApiKey: string;
+  openaiApiKey: string;
+  ollamaBaseUrl: string;
   baseUrl: string;
   temperature: string;
   thinkingLevel: string;
@@ -25,7 +29,11 @@ export interface AgentSettings {
 export const DEFAULT_SETTINGS: AgentSettings = {
   provider: "google",
   model: "gemini-2.5-flash",
+  modelSupportsImages: true,
   googleApiKey: "",
+  anthropicApiKey: "",
+  openaiApiKey: "",
+  ollamaBaseUrl: "http://localhost:11434",
   baseUrl: "",
   temperature: "Default",
   thinkingLevel: "Default",
@@ -39,6 +47,14 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   debug: false,
 };
 
+// Human-readable labels for each supported provider, used across the settings UI
+const PROVIDER_LABELS: Record<Provider, string> = {
+  google: "Google",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  ollama: "Ollama (local)",
+};
+
 // Settings tab class
 export class AgentSettingsTab extends PluginSettingTab {
   plugin: ObsidianAgentPlugin;
@@ -48,72 +64,176 @@ export class AgentSettingsTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  // Method that displays the settings tab
-  display(): void {
-    let { containerEl } = this;
-    containerEl.empty();
-
-    // Language model settings
-    new Setting(containerEl)
-      .setName("Model")
-      .setDesc("Select the Google language model to use.")
-      .addButton((button) => {
-        button.setButtonText(this.plugin.settings.model || "Choose model");
-        button.onClick(() => {
-          const app = getApp();
-          const plugin = getPlugin();
-          new ChooseModelModal(app, (model) => {
-            this.plugin.settings.model = model.name;
-            this.plugin.settings.provider = model.provider;
-            plugin.saveSettings();
-            button.setButtonText(model.name);
-          }).open();
-        });
-        return button;
-      });
-
-    // API keys settings
-    // GOOGLE
-    const googleSetting = new Setting(containerEl)
-      .setName("Google api key")
-      .setDesc("Enter your Google API key.");
-    let googleRevealed = false;
-    googleSetting.addText((text) => {
+  // Adds a password-style text field with a show/hide toggle button.
+  // Shared by every provider credential field below to avoid repeating the
+  // eye-icon wiring four times.
+  private addSecretField(
+    containerEl: HTMLElement,
+    name: string,
+    desc: string,
+    placeholder: string,
+    getValue: () => string,
+    setValue: (value: string) => void
+  ): void {
+    const setting = new Setting(containerEl).setName(name).setDesc(desc);
+    let revealed = false;
+    let textComponent: TextComponent;
+    setting.addText((text) => {
+      textComponent = text;
       text
-        .setPlaceholder("Enter your API key.")
-        .setValue(this.plugin.settings.googleApiKey)
+        .setPlaceholder(placeholder)
+        .setValue(getValue())
         .onChange(async (value) => {
-          this.plugin.settings.googleApiKey = value;
+          setValue(value);
           await this.plugin.saveSettings();
         });
       text.inputEl.type = "password";
     });
-    googleSetting.addExtraButton((btn) => {
+    setting.addExtraButton((btn) => {
       btn.setIcon("eye")
-        .setTooltip("Show/hide api key")
+        .setTooltip("Show/hide value")
         .onClick(() => {
-          googleRevealed = !googleRevealed;
-          const input = googleSetting.controlEl.querySelector("input");
-          if (input) input.type = googleRevealed ? "text" : "password";
-          btn.setIcon(googleRevealed ? "eye-off" : "eye");
+          revealed = !revealed;
+          textComponent.inputEl.type = revealed ? "text" : "password";
+          btn.setIcon(revealed ? "eye-off" : "eye");
         });
     });
+  }
 
-    // Base URL settings
-    const baseUrlSetting = new Setting(containerEl)
-      .setName("Base URL")
-      .setDesc("Enter your URL for the Google API. Leave blank to use the default URL.");
-    baseUrlSetting.addText((text) => {
-      text
-        .setPlaceholder("https://generativelanguage.googleapis.com")
-        .setValue(this.plugin.settings.baseUrl)
-        .onChange(async (value) => {
-          this.plugin.settings.baseUrl = value;
-          await this.plugin.saveSettings();
+  // Method that displays the settings tab
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+
+    // Provider selection
+    new Setting(containerEl)
+      .setName("Provider")
+      .setDesc("Select the AI provider to use. Each provider needs its own credentials below.")
+      .addDropdown((dropdown: DropdownComponent) => {
+        (Object.keys(PROVIDER_LABELS) as Provider[]).forEach((provider) => {
+          dropdown.addOption(provider, PROVIDER_LABELS[provider]);
         });
-    });
+
+        dropdown
+          .setValue(this.plugin.settings.provider)
+          .onChange(async (value) => {
+            this.plugin.settings.provider = value as Provider;
+            await this.plugin.saveSettings();
+            // Re-render so only the relevant credential field is shown
+            this.display();
+          });
+      });
+
+    // Model name (free text, since providers expose far more models than we could curate)
+    new Setting(containerEl)
+      .setName("Model")
+      .setDesc("Type the exact model name your provider expects (e.g. gemini-2.5-flash, claude-sonnet-4-5, gpt-5, llama3.1).")
+      .addText((text) => {
+        text
+          .setPlaceholder("Model name")
+          .setValue(this.plugin.settings.model)
+          .onChange(async (value) => {
+            this.plugin.settings.model = value;
+            await this.plugin.saveSettings();
+          });
+      })
+      .addExtraButton((btn) => {
+        btn.setIcon("list")
+          .setTooltip("Browse suggested models")
+          .onClick(() => {
+            const app = getApp();
+            const plugin = getPlugin();
+            new ChooseModelModal(app, (selected: SelectedModel) => {
+              this.plugin.settings.provider = selected.provider;
+              this.plugin.settings.model = selected.name;
+              void plugin.saveSettings();
+              this.display();
+            }).open();
+          });
+      });
+
+    // Manual capability toggle: free-text model names can't be looked up for capabilities
+    new Setting(containerEl)
+      .setName("Model supports images")
+      .setDesc("Enable this if the selected model can understand image input. This controls whether you can attach images to your messages.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.modelSupportsImages)
+          .onChange(async (value) => {
+            this.plugin.settings.modelSupportsImages = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Per-provider credentials: only show the field relevant to the active provider
+    new Setting(containerEl).setName("Credentials").setHeading();
+
+    switch (this.plugin.settings.provider) {
+      case "google":
+        this.addSecretField(
+          containerEl,
+          "Google API key",
+          "Enter your Google API key.",
+          "Enter your API key.",
+          () => this.plugin.settings.googleApiKey,
+          (value) => (this.plugin.settings.googleApiKey = value)
+        );
+        break;
+      case "anthropic":
+        this.addSecretField(
+          containerEl,
+          "Anthropic API key",
+          "Enter your Anthropic API key.",
+          "Enter your API key.",
+          () => this.plugin.settings.anthropicApiKey,
+          (value) => (this.plugin.settings.anthropicApiKey = value)
+        );
+        break;
+      case "openai":
+        this.addSecretField(
+          containerEl,
+          "OpenAI API key",
+          "Enter your OpenAI API key.",
+          "Enter your API key.",
+          () => this.plugin.settings.openaiApiKey,
+          (value) => (this.plugin.settings.openaiApiKey = value)
+        );
+        break;
+      case "ollama":
+        new Setting(containerEl)
+          .setName("Ollama base URL")
+          .setDesc("Enter the URL where your local Ollama server is running.")
+          .addText((text) =>
+            text
+              .setPlaceholder(DEFAULT_SETTINGS.ollamaBaseUrl)
+              .setValue(this.plugin.settings.ollamaBaseUrl)
+              .onChange(async (value) => {
+                this.plugin.settings.ollamaBaseUrl = value;
+                await this.plugin.saveSettings();
+              })
+          );
+        break;
+    }
+
+    // Base URL override (not applicable to Ollama, which has its own dedicated field)
+    if (this.plugin.settings.provider !== "ollama") {
+      new Setting(containerEl)
+        .setName("Base URL override")
+        .setDesc("Optionally override the default API endpoint for the selected provider. Leave blank to use the provider's default.")
+        .addText((text) => {
+          text
+            .setPlaceholder("Default")
+            .setValue(this.plugin.settings.baseUrl)
+            .onChange(async (value) => {
+              this.plugin.settings.baseUrl = value;
+              await this.plugin.saveSettings();
+            });
+        });
+    }
 
     // LLM settings
+    new Setting(containerEl).setName('Model').setHeading();
+
     new Setting(containerEl)
     .setName("Temperature")
     .setDesc("Higher values make output more random, while lower values make it more focused and deterministic. Min: 0, Max: 2.")
@@ -122,13 +242,9 @@ export class AgentSettingsTab extends PluginSettingTab {
         .setValue(String(this.plugin.settings.temperature))
         .onChange(async (value) => {
           const num = Number(value);
-          if (Number.isNaN(num) || num > 2 || num < 0) {
-            this.plugin.settings.temperature = DEFAULT_SETTINGS.temperature;
-            await this.plugin.saveSettings();
-          } else {
-            this.plugin.settings.temperature = value;
-            await this.plugin.saveSettings();
-          }
+          const isValid = !Number.isNaN(num) && num >= 0 && num <= 2;
+          this.plugin.settings.temperature = isValid ? value : DEFAULT_SETTINGS.temperature;
+          await this.plugin.saveSettings();
         })
     );
 
@@ -140,41 +256,39 @@ export class AgentSettingsTab extends PluginSettingTab {
         .setValue(String(this.plugin.settings.maxOutputTokens))
         .onChange(async (value) => {
           const num = Number(value);
-          if (Number.isNaN(num) || num < 0) {
-            this.plugin.settings.maxOutputTokens = DEFAULT_SETTINGS.maxOutputTokens;
-            await this.plugin.saveSettings();
-          } else {
-            this.plugin.settings.maxOutputTokens = value;
-            await this.plugin.saveSettings();
-          }
+          const isValid = !Number.isNaN(num) && num >= 0;
+          this.plugin.settings.maxOutputTokens = isValid ? value : DEFAULT_SETTINGS.maxOutputTokens;
+          await this.plugin.saveSettings();
         })
     );
 
-    new Setting(containerEl)
-    .setName("Thinking level")
-    .setDesc("Set the level of reasoning the model should use. This setting only applies to Gemini 3 models, others use default reasoning level.")
-      .addDropdown((dropdown: DropdownComponent) => {
-        dropdown.addOption("Low", "Low");
-        dropdown.addOption("High", "High");
-        dropdown.addOption("Default", "Default");
-        
-        dropdown
-        .setValue(this.plugin.settings.thinkingLevel)
-        .onChange(async (value) => {
-          this.plugin.settings.thinkingLevel = value as ThinkingLevel;
-          await this.plugin.saveSettings();
-        });
-      }
-    );
-    
+    if (this.plugin.settings.provider === "google") {
+      new Setting(containerEl)
+      .setName("Thinking level")
+      .setDesc("Set the level of reasoning the model should use. This setting only applies to Gemini 3 models, others use default reasoning level.")
+        .addDropdown((dropdown: DropdownComponent) => {
+          dropdown.addOption("Low", "Low");
+          dropdown.addOption("High", "High");
+          dropdown.addOption("Default", "Default");
+
+          dropdown
+          .setValue(this.plugin.settings.thinkingLevel)
+          .onChange(async (value) => {
+            this.plugin.settings.thinkingLevel = value;
+            await this.plugin.saveSettings();
+          });
+        }
+      );
+    }
+
     // Agent rules
     const rulesSetting = new Setting(containerEl)
       .setName("Agent rules")
       .setDesc("Add an aditional set of rules to change the agent behaviour.");
-    
+
     rulesSetting.settingEl.classList.add("obsidian-agent__settings-rules-container");
     rulesSetting.controlEl.classList.add("obsidian-agent__settings-rules-control");
-    
+
     rulesSetting.addTextArea((text) => {
       text
         .setValue(this.plugin.settings.rules)
@@ -188,7 +302,7 @@ export class AgentSettingsTab extends PluginSettingTab {
     });
 
     // History settings
-    new Setting(containerEl).setName('History settings').setHeading();
+    new Setting(containerEl).setName('History').setHeading();
 
 
     // Chat history folder
@@ -200,7 +314,7 @@ export class AgentSettingsTab extends PluginSettingTab {
       folders.forEach(folder => {
         dropdown.addOption(folder.path, folder.name);
       });
-      
+
       dropdown
         .setValue(this.plugin.settings.chatsFolder)
         .onChange(async (value) => {
@@ -218,13 +332,8 @@ export class AgentSettingsTab extends PluginSettingTab {
           .setValue(String(this.plugin.settings.maxHistoryTurns))
           .onChange(async (value) => {
             const n = Number(value);
-            if (Number.isNaN(n) || n <= 0) {
-              this.plugin.settings.maxHistoryTurns = DEFAULT_SETTINGS.maxHistoryTurns;
-              await this.plugin.saveSettings();
-            } else {
-              this.plugin.settings.maxHistoryTurns = n;
-              await this.plugin.saveSettings();
-            }
+            this.plugin.settings.maxHistoryTurns = (!Number.isNaN(n) && n > 0) ? n : DEFAULT_SETTINGS.maxHistoryTurns;
+            await this.plugin.saveSettings();
           })
       );
 
@@ -266,9 +375,9 @@ export class AgentSettingsTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
-    
+
     // Developer settings
-    new Setting(containerEl).setName('Developer settings').setHeading();
+    new Setting(containerEl).setName('Developer').setHeading();
 
     new Setting(containerEl)
       .setName("Debug mode")
@@ -288,18 +397,11 @@ export class AgentSettingsTab extends PluginSettingTab {
     .addButton((button) => {
       button.setButtonText("Reset");
       button.onClick(async () => {
-        this.plugin.settings.model = DEFAULT_SETTINGS.model;
-        this.plugin.settings.temperature = DEFAULT_SETTINGS.temperature;
-        this.plugin.settings.thinkingLevel = DEFAULT_SETTINGS.thinkingLevel;
-        this.plugin.settings.maxOutputTokens = DEFAULT_SETTINGS.maxOutputTokens;
-        this.plugin.settings.rules = DEFAULT_SETTINGS.rules;
-        this.plugin.settings.chatsFolder = DEFAULT_SETTINGS.chatsFolder;
-        this.plugin.settings.maxHistoryTurns = DEFAULT_SETTINGS.maxHistoryTurns;
-        this.plugin.settings.generateChatName = DEFAULT_SETTINGS.generateChatName;
-        this.plugin.settings.readImages = DEFAULT_SETTINGS.readImages;
-        this.plugin.settings.reviewChanges = DEFAULT_SETTINGS.reviewChanges;
-        this.plugin.settings.debug = DEFAULT_SETTINGS.debug;
+        // Reset to defaults, but keep the provider credentials (API keys) the user entered
+        const { googleApiKey, anthropicApiKey, openaiApiKey } = this.plugin.settings;
+        Object.assign(this.plugin.settings, DEFAULT_SETTINGS, { googleApiKey, anthropicApiKey, openaiApiKey });
         await this.plugin.saveSettings();
+        this.display();
       });
       return button;
     });

@@ -22,7 +22,7 @@ export class ChatHistoryModal extends FuzzySuggestModal<TFile> {
     if (!folder) {
         if (settings.debug) console.error("The folder that stores the chats does not exist.");
         // Create a new folder
-        this.app.vault.createFolder(settings.chatsFolder);
+        void this.app.vault.createFolder(settings.chatsFolder);
         return []; // Return empty array if folder doesn't exist
     }
     return folder.children.filter(
@@ -52,7 +52,7 @@ export class ChatHistoryModal extends FuzzySuggestModal<TFile> {
     this.close();
   }
 
-  async renderSuggestion(chatMatch: FuzzyMatch<TFile>, el: HTMLElement): Promise<void> {
+  renderSuggestion(chatMatch: FuzzyMatch<TFile>, el: HTMLElement): void {
     const { item: chat } = chatMatch;
     el.empty();
 
@@ -64,15 +64,23 @@ export class ChatHistoryModal extends FuzzySuggestModal<TFile> {
     const nameEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__name" });
     nameEl.setText(chat.basename + (chat === this.activeChat ? " (current)" : ""));
 
-    const firstMessagePreview = textContainer.createDiv({ cls: "obsidian-agent__model-modal__info" });
-    const conversation: Message[] = await importConversation(chat);
-    const len = conversation.length;
-    firstMessagePreview.setText(
-      conversation.length > 0 ?
-        conversation[len - 1].content.length > 50 ?
-          `${conversation[len - 1].content.slice(0, 50).replace("\n", " ")}...` :
-          `${conversation[len - 1].content.replace("\n", " ")}` :
-        `empty chat`
-    );
+    const previewEl = textContainer.createDiv({ cls: "obsidian-agent__model-modal__info" });
+    previewEl.setText("...");
+
+    void (async () => {
+      try {
+        const conversation: Message[] = await importConversation(chat);
+        const len = conversation.length;
+        previewEl.setText(
+          conversation.length > 0 ?
+            conversation[len - 1].content.length > 50 ?
+              `${conversation[len - 1].content.slice(0, 50).replace("\n", " ")}...` :
+              `${conversation[len - 1].content.replace("\n", " ")}` :
+            `empty chat`
+        );
+      } catch {
+        previewEl.setText("empty chat");
+      }
+    })();
   }
 }

@@ -19,7 +19,7 @@ export default function Form({
     new ChatHistoryModal(
       app, 
       activeChat,
-      async (c: TFile) => { setActiveChat(c) }
+      (c: TFile) => { setActiveChat(c) }
     ).open();
   }
 
@@ -42,15 +42,15 @@ export default function Form({
   return (
     <div className="obsidian-agent__chat-form">
       <button
-        onClick={openChatHistory}
+        onClick={() => void openChatHistory()}
         className="obsidian-agent__chat-form__title"
       >
         {activeChat ? activeChat.basename : "No chat selected"}
       </button>
       
       <div className="obsidian-agent__chat-form__actions">
-        <button 
-          onClick={handleCreateWithStates}
+        <button
+          onClick={() => void handleCreateWithStates()}
           title="Create new chat"
           className="obsidian-agent__button-icon"
         >
@@ -58,7 +58,7 @@ export default function Form({
         </button>
 
         <button
-          onClick={openChatHistory} 
+          onClick={() => void openChatHistory()}
           title="Select chat"
           className="obsidian-agent__button-icon"
         >
@@ -71,7 +71,7 @@ export default function Form({
               const app = getApp();
               new DeleteChatModal(
                 app,
-                async () => { await handleDeleteWithStates() },
+                () => void handleDeleteWithStates(),
                 activeChat.basename
               ).open();
             }

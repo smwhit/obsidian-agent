@@ -1,32 +1,24 @@
-import { Type } from "@google/genai";
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 import { getApp } from "src/plugin";
 import { getNextAvailableFolderName } from 'src/utils/notes/renaming';
 
-export const createDirFunctionDeclaration = ({
-  name: "create_directory",
-  description: "Create a directory in Obsidian. No parameters are needed.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      name: {
-        type: Type.STRING,
-        description: "The name of the directory",
-        default: "New directory",
-      },
-      dirPath: {
-        type: Type.STRING,
-        description: "The path of the directory where is going to be placed",
-        default: "",
-      },
-    },
-    required: [],
-  },
-})
+export const createDirTool = tool(
+  async ({ name, dirPath }) => createDir(name, dirPath),
+  {
+    name: "create_directory",
+    description: "Create a directory in Obsidian. No parameters are needed.",
+    schema: z.object({
+      name: z.string().optional().describe("The name of the directory"),
+      dirPath: z.string().optional().describe("The path of the directory where is going to be placed"),
+    }),
+  }
+);
 
 // Obsidian tool to create directories
 export async function createDir(
-  name: string = "New directory",
-  dirPath: string = "",
+  name = "New directory",
+  dirPath = "",
 ) {
   // Declaring the app and inputs
   const app = getApp();

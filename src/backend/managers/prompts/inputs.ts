@@ -1,97 +1,92 @@
-import { Content, Part } from "@google/genai";
+import { AIMessage, BaseMessage, ContentBlock, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { getSettings } from "src/plugin";
 import { imageToBase64 } from "src/utils/parsing/imageBase64";
 import { Message } from "src/types/chat";
 
+// Multimodal content blocks accepted by a HumanMessage (LangChain v1 content-block model)
+export type UserContentBlock = ContentBlock.Text | ContentBlock.Multimodal.Image;
 
-// Function that prepare the prompt into inputs for the agent
-// This function only manages text and files, function calls are not handled here
-// Look how to handle function calls in buildChatHistory
+// `imageToBase64` reads the file as a data URL (`data:<mime>;base64,<data>`);
+// this splits it into the `mimeType`/`data` pair the Image content block expects.
+const DATA_URL_PATTERN = /^data:([^;,]+);base64,(.*)$/;
+
+// Function that prepares the prompt into multimodal content blocks for a HumanMessage
+// This function only manages text and files, tool calls are not handled here
+// Look how to handle tool calls in buildChatHistory
 export async function prepareModelInputs(
   user: string,
   files: File[],
-): Promise<Part[]> {
-  const parts: Part[] = [{ text: user }];
+): Promise<UserContentBlock[]> {
+  const blocks: UserContentBlock[] = [{ type: "text", text: user }];
 
   for (const file of files) {
-    const base64 = await imageToBase64(file);
+    const dataUrl = await imageToBase64(file);
+    const match = DATA_URL_PATTERN.exec(dataUrl);
+    if (!match) continue;
 
-    parts.push({
-      inlineData: {
-        mimeType: file.type,
-        data: base64.replace(/^data:.*;base64,/, ""), // Remove the data URL prefix
-      },
-    });
-  };
+    const [, mimeType, data] = match;
+    blocks.push({ type: "image", mimeType, data });
+  }
 
-  return parts;
+  return blocks;
 }
 
 
-// Function that builds the chat history
+// Function that builds the chat history as LangChain messages
 export async function buildChatHistory(
   conversation: Message[],
-): Promise<Content[]> {
+): Promise<BaseMessage[]> {
   const settings = getSettings();
   const maxHistoryTurns = settings.maxHistoryTurns;
 
   if (maxHistoryTurns === 0) return [];
 
-  const chatHistory: Content[] = [];
+  const chatHistory: BaseMessage[] = [];
   let selectedMessages: Message[] = conversation.slice(-maxHistoryTurns*2);
   // Reverse to process the messages in the order they were sent
-  selectedMessages = selectedMessages.reverse(); 
+  selectedMessages = selectedMessages.reverse();
 
   for (const message of selectedMessages) {
     if (message.sender === "error") continue;
 
-    // We need to include the function response (user) and the function call (model)
-    // Per tool call made by the model
+    // We need to include the tool call (AI) and its result (tool)
+    // per tool call made by the model
     if (message.toolCalls.length > 0) {
-      for (const funcCall of message.toolCalls) {
-        const modelFunctionCall: Part[] = [{
-          functionCall: {
-            name: funcCall.name,
-            args: funcCall.args,
-          }
-        }];
-        chatHistory.push({
-          role: "model",
-          parts: modelFunctionCall,
-        });
+      for (const [index, toolCall] of message.toolCalls.entries()) {
+        // History tool calls don't carry an id, synthesize a stable one for pairing
+        const callId = `${toolCall.name}-${chatHistory.length}-${index}`;
 
-        const userFunctionResponse: Part[] = [{
-          functionResponse: {
-            name: funcCall.name,
-            response: funcCall.response
-          }
-        }]
-        chatHistory.push({
-          role: "user",
-          parts: userFunctionResponse,
-        });
+        chatHistory.push(new AIMessage({
+          content: "",
+          tool_calls: [{
+            name: toolCall.name,
+            args: toolCall.args ?? {},
+            id: callId,
+          }],
+        }));
+
+        chatHistory.push(new ToolMessage({
+          tool_call_id: callId,
+          name: toolCall.name,
+          content: JSON.stringify(toolCall.response ?? {}),
+        }));
       }
 
       if (message.content.trim().length > 0) {
-        const modelFinalAnswer: Part[] = [{
-          text: message.content,
-        }]
-        chatHistory.push({
-          role: "model",
-          parts: modelFinalAnswer,
-        });
+        chatHistory.push(new AIMessage(message.content));
       }
     } else {
-      const parts: Part[] = await prepareModelInputs(message.content, []);
-      chatHistory.push({
-        role: message.sender === "user" ? "user" : "model",   
-        parts: parts,
-      });
+      if (message.sender === "user") {
+        const blocks = await prepareModelInputs(message.content, []);
+        chatHistory.push(new HumanMessage({ content: blocks }));
+      } else {
+        chatHistory.push(new AIMessage(message.content));
+      }
     }
-  };
-  
+  }
+
   // Reverse back to original order
   chatHistory.reverse();
-  
+
   return chatHistory;
 }

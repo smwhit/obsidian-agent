@@ -7,7 +7,7 @@ export function exportMessage(message: Message, chat: TFile) {
   const app = getApp();
 
   const payload: string = JSON.stringify(message);
-  app.vault.process(chat, (data) => {
+  void app.vault.process(chat, (data) => {
     const clean = data.trim(); 
     return clean.length > 0 ? clean + "\n" + payload : payload;
   });
@@ -33,15 +33,6 @@ export async function importConversation(chat: TFile): Promise<Message[]> {
   .filter((msg): msg is Message => msg !== null);
 
   return messages;
-}
-
-// Function to get the thread_id of the chat
-export async function getThreadId(chat: TFile) {
-  const app = getApp();
-  const content = await app.vault.read(chat);
-
-  const match = content.match(/thread_id:\s*(chat-[\w:-]+)/);
-  return match ? match[1] : '';
 }
 
 // Remove the last message from a chat file

@@ -9,7 +9,7 @@ const MS = {
 
 // Main function to parse date ranges
 export function parseDateRange(
-  dateRange: string | { start: string | number, end: string | number },
+  dateRange: string | { start: string, end: string },
   now = new Date(),
 ) {
   if (!dateRange) return undefined;
@@ -23,14 +23,8 @@ export function parseDateRange(
   
     if (match) {
       const number = Number(match[1]);
-      const unit = match[2];
-
-      const unit_ms = unit === "s" ? MS.s :
-        unit === "m" ? MS.m :
-        unit === "h" ? MS.h :
-        unit === "d" ? MS.d :
-        unit === "w" ? MS.w : 0;
-      const ms = number * unit_ms;
+      const unit = match[2] as keyof typeof MS;
+      const ms = number * MS[unit];
       
       return { start: now.getTime() - ms, end: now.getTime() };
     }
@@ -58,7 +52,7 @@ export function parseDateRange(
 }
 
 // Helper function to parse a date input
-function parseDate(date: any) {
+function parseDate(date: unknown) {
   if (date === null || date === undefined) return undefined;
   
   if (typeof date === "number") return date; // miliseconds

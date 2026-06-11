@@ -12,13 +12,13 @@ async function createChatFolder(): Promise<TFolder | null> {
     return await app.vault.createFolder(settings.chatsFolder);
   
   } catch (error) {
-    const errorMsg = "Error creating chat folder: " + error;
+    const errorMsg = "Error creating chat folder: " + String(error);
     new Notice(errorMsg, 5000);
     if (settings.debug) console.error(errorMsg);
   }
 
   return null;
-};
+}
 
 // Create a new chat file
 async function createNewChatFile(folder: TFolder): Promise<TFile  | null> {
@@ -35,13 +35,13 @@ async function createNewChatFile(folder: TFolder): Promise<TFile  | null> {
     return await app.vault.create(chatFilePath, tags);
   
   } catch (error) {
-    const errorMsg = "Error creating chat file: " + error;
+    const errorMsg = "Error creating chat file: " + String(error);
     new Notice(errorMsg, 5000);
     if (settings.debug) console.error(errorMsg);
   }
 
   return null;
-};
+}
 
 // Load the existing chat files in the chat folder
 async function loadChatFiles(folder: TFolder): Promise<TFile[]> {
@@ -55,13 +55,13 @@ async function loadChatFiles(folder: TFolder): Promise<TFile[]> {
     return files;
 
   } catch (error) {
-    const errorMsg = "Error loading files from the chat folder: " + error;
+    const errorMsg = "Error loading files from the chat folder: " + String(error);
     new Notice(errorMsg, 5000);
     if (settings.debug) console.error(errorMsg);
   }
 
   return [];
-};
+}
 
 
 // Handles the creation of a chat and refresh the list of available chats
@@ -91,7 +91,7 @@ export const handleDeleteChat = async (activeChat: TFile, availableChats: TFile[
   const settings = getSettings();
 
   // Open chat folder
-  let chatFolder: TFolder | null = app.vault.getFolderByPath(settings.chatsFolder);
+  const chatFolder: TFolder | null = app.vault.getFolderByPath(settings.chatsFolder);
   if (!chatFolder) {
     const errorMsg = "Cannot delete, no chat folder found";
     new Notice(errorMsg, 5000);

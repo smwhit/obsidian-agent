@@ -1,85 +1,48 @@
 import { getApp } from "src/plugin";
 
-// Append a number to a name if the file or the folder already exists
-export function getNextAvailableFileName(base: string, parentPath: string): string {
-    const app = getApp();
-
-    const extMatch = base.match(/\.[^/.]+$/);
-    const ext = extMatch ? extMatch[0] : '';
-    const nameWithoutExt = ext ? base.slice(0, -ext.length) : base;
-    
-    // Check if the name already has a numbered suffix like " (1)", " (2)", etc.
-    const numberedSuffixMatch = nameWithoutExt.match(/^(.+) \((\d+)\)$/);
-    const baseName = numberedSuffixMatch ? numberedSuffixMatch[1] : nameWithoutExt;
-    const startingNumber = numberedSuffixMatch ? parseInt(numberedSuffixMatch[2]) + 1 : 1;
-
-    let i = startingNumber;
-    let newName: string;
-    let fullPath: string;
-
-    // Helper function to construct proper path
-    const constructPath = (filename: string) => {
-        if (parentPath === '/' || parentPath === '') {
-            return filename;
-        }
-        return `${parentPath.replace(/\/$/, '')}/${filename}`;
-    };
-
-    // First, check if the original base name is available
-    newName = `${baseName}${ext}`;
-    fullPath = constructPath(newName);
-    
-    // If original name is available, return it
-    if (!app.vault.getAbstractFileByPath(fullPath)) {
-        return newName;
-    }
-
-    // If not available, start appending numbers
-    do {
-        newName = `${baseName} (${i})${ext}`;
-        fullPath = constructPath(newName);
-        i++;
-    } while (app.vault.getAbstractFileByPath(fullPath));
-
-    return newName;
+// Builds the full vault path for `name` inside `parentPath`, treating the
+// vault root ('' or '/') as having no path prefix.
+function constructPath(parentPath: string, name: string): string {
+    if (parentPath === '/' || parentPath === '') return name;
+    return `${parentPath.replace(/\/$/, '')}/${name}`;
 }
 
-// Append a number to a folder name if the folder already exists
-export function getNextAvailableFolderName(base: string, parentPath: string): string {
+// Appends a numbered suffix " (n)" to `baseName` until an unused name is found
+// inside `parentPath`. `ext` (e.g. ".md") is kept at the end of file names;
+// folders pass an empty string. Reuses and continues an existing numbered
+// suffix like " (1)", " (2)", etc. instead of stacking a new one.
+function nextAvailableName(baseName: string, ext: string, parentPath: string): string {
     const app = getApp();
-    
-    // Check if the name already has a numbered suffix like " (1)", " (2)", etc.
-    const numberedSuffixMatch = base.match(/^(.+) \((\d+)\)$/);
-    const baseName = numberedSuffixMatch ? numberedSuffixMatch[1] : base;
+
+    const numberedSuffixMatch = baseName.match(/^(.+) \((\d+)\)$/);
+    const root = numberedSuffixMatch ? numberedSuffixMatch[1] : baseName;
     const startingNumber = numberedSuffixMatch ? parseInt(numberedSuffixMatch[2]) + 1 : 1;
 
-    let i = startingNumber;
-    let newName: string;
-    let fullPath: string;
-
-    // Helper function to construct proper path
-    const constructPath = (folderName: string) => {
-        if (parentPath === '/' || parentPath === '') {
-            return folderName;
-        }
-        return `${parentPath.replace(/\/$/, '')}/${folderName}`;
-    };
-
-    // First, check if the original base name is available
-    newName = baseName;
-    fullPath = constructPath(newName);
-    
-    // If original name is available, return it
-    if (!app.vault.getAbstractFileByPath(fullPath)) {
-        return newName;
+    // The original name is available, use it as-is
+    const original = `${root}${ext}`;
+    if (!app.vault.getAbstractFileByPath(constructPath(parentPath, original))) {
+        return original;
     }
 
-    // If not available, start appending numbers
-    do {
-        newName = `${baseName} (${i})`;
-        fullPath = constructPath(newName);
-        i++;
-    } while (app.vault.getAbstractFileByPath(fullPath));
+    // Otherwise keep incrementing the suffix until a free name is found
+    for (let i = startingNumber; ; i++) {
+        const candidate = `${root} (${i})${ext}`;
+        if (!app.vault.getAbstractFileByPath(constructPath(parentPath, candidate))) {
+            return candidate;
+        }
+    }
+}
 
-    return newName;
+// Append a number to a file name if it already exists, keeping its extension
+export function getNextAvailableFileName(base: string, parentPath: string): string {
+    const extMatch = base.match(/\.[^/.]+$/);
+    const ext = extMatch ? extMatch[0] : '';
+    const baseName = ext ? base.slice(0, -ext.length) : base;
+
+    return nextAvailableName(baseName, ext, parentPath);
+}
+
+// Append a number to a folder name if it already exists
+export function getNextAvailableFolderName(base: string, parentPath: string): string {
+    return nextAvailableName(base, '', parentPath);
 }

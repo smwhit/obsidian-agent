@@ -1,4 +1,5 @@
-import { Type } from '@google/genai';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 import { TFile } from 'obsidian';
 import { getApp, getSettings } from "src/plugin";
 import { findClosestFile } from 'src/utils/notes/searching';
@@ -7,31 +8,22 @@ import { removeImagesFromNote, extractImagesFromNote } from "src/utils/parsing/i
 import { callModel } from 'src/backend/managers/modelRunner';
 
 
-export const readNoteFunctionDeclaration = {
-  name: "read_note",
-  description: "Reads the content of a note in Obsidian by name or by detecting the currently active note. The content itself is not needed as input.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      fileName: {
-        type: Type.STRING,
-        description: "The name or path of the note to read",
-        default: "",
-      },
-      activeNote: {
-        type: Type.BOOLEAN,
-        description: "If no filename provided set to true to read the active note",
-        default: false,
-      },
-    },
-    required: [],
-  },
-}
+export const readNoteTool = tool(
+  async ({ fileName, activeNote }) => readNote(fileName, activeNote),
+  {
+    name: "read_note",
+    description: "Reads the content of a note in Obsidian by name or by detecting the currently active note. The content itself is not needed as input.",
+    schema: z.object({
+      fileName: z.string().optional().describe("The name or path of the note to read"),
+      activeNote: z.boolean().optional().describe("If no filename provided set to true to read the active note"),
+    }),
+  }
+);
 
 // Obsidian tool to read notes
 export async function readNote(
-  fileName: string = "",
-  activeNote: boolean = false,
+  fileName = "",
+  activeNote = false,
 ) {
   const app = getApp();
   const settings = getSettings();
@@ -69,7 +61,7 @@ export async function readNote(
   
   try {
     // Extract base64 images, from embeds and from content
-    let images: File[] = []
+    const images: File[] = []
     if (settings.readImages) {
       // Extract base64 images from embeds
       const embeds = getEmbeds(matchedFile);
@@ -87,7 +79,7 @@ export async function readNote(
         const imageDescriptions = await callModel(
           "", 
           "Return a list of captions for the following image(s):",
-          images, // TODO: Handle this error
+          images,
         );
         if (typeof imageDescriptions !== "string") throw new Error("Invalid response from LLM");  
         

@@ -1,4 +1,4 @@
-import { Menu, Editor, MarkdownView } from "obsidian";
+import { Menu, Editor, MarkdownView, MarkdownFileInfo } from "obsidian";
 import { ObsidianAgentPlugin } from "src/plugin";
 import { ensureActiveChat } from "src/feature/chat/handlers/chatHandlers";
 import { handleCall } from "src/feature/chat/handlers/aiHandlers";
@@ -8,15 +8,16 @@ import { ChatView, VIEW_TYPE_AGENT } from "src/feature/chat/View";
 // Add items to the Menu
 export function registerEditorMenuItems(plugin: ObsidianAgentPlugin) {
   plugin.registerEvent(
-    (plugin.app.workspace as any).on(
+    plugin.app.workspace.on(
       "editor-menu",
-      (menu: Menu, editor: Editor, view: MarkdownView) => {
+      (menu: Menu, editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
         const selectedText = editor.getSelection();
         if (!selectedText) return;
+        if (!(info instanceof MarkdownView)) return;
 
         // Here we add the items
-        addAskAgentItem(plugin, menu, selectedText, view);
-        addSummarizeItem(plugin, menu, selectedText, view);
+        addAskAgentItem(plugin, menu, selectedText, info);
+        addSummarizeItem(plugin, menu, selectedText, info);
       }
     )
   );

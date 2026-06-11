@@ -47,8 +47,8 @@ export interface MessageProps {
 // Tools
 export interface ToolCall {
   name: string;
-  args?: Record<string, any>;
-  response?: Record<string, any>;
+  args?: Record<string, unknown>;
+  response?: Record<string, unknown>;
 }
 
 export interface ToolCallsProps {

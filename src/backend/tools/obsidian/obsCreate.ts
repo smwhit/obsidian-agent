@@ -1,4 +1,5 @@
-import { Type } from '@google/genai';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 import { getApp } from "src/plugin";
 import { findMatchingFolder } from 'src/utils/notes/searching';
 import { getNextAvailableFileName } from "src/utils/notes/renaming";
@@ -7,62 +8,33 @@ import { writingSystemPrompt } from 'src/backend/managers/prompts/library';
 import { callModel } from 'src/backend/managers/modelRunner';
 
 
-export const createNoteFunctionDeclaration = {
-  name: "create_note",
-  description: "Create a note. Content can be generated with a topic or provided manually. If no name provided a default one will be used.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      topic: {
-        type: Type.STRING,
-        description: 'The topic of the note, what is going to be written about',
-        default: "",
-      },
-      name: {
-        type: Type.STRING,
-        description: 'The note name the user provided with markdown file extension .md',
-        default: "Generated note.md",
-      },
-      tags: {
-        type: Type.ARRAY,
-        description: 'The tags the user wants to add to the note, do not make them up',
-        items: { type: Type.STRING },
-        default: [],
-      },
-      context: {
-        type: Type.STRING,
-        description: 'Context the user provided to write the note',
-        default: "",
-      },
-      dirPath: {
-        type: Type.STRING,
-        description: 'The path of the directory where the note is going to be stored',
-        default: "",
-      },
-      content: {
-        type: Type.STRING,
-        description: 'Custom markdown content to use instead of generating',
-        default: "",
-      },
-      useLlm: {
-        type: Type.BOOLEAN,
-        description: 'Whether to use the LLM to generate the content.',
-        default: true,
-      },
-    },
-    required: [],
+export const createNoteTool = tool(
+  async ({ topic, name, tags, context, dirPath, content, useLlm }) =>
+    createNote(topic, name, tags, context, dirPath, content, useLlm),
+  {
+    name: "create_note",
+    description: "Create a note. Content can be generated with a topic or provided manually. If no name provided a default one will be used.",
+    schema: z.object({
+      topic: z.string().optional().describe("The topic of the note, what is going to be written about"),
+      name: z.string().optional().describe("The note name the user provided with markdown file extension .md"),
+      tags: z.array(z.string()).optional().describe("The tags the user wants to add to the note, do not make them up"),
+      context: z.string().optional().describe("Context the user provided to write the note"),
+      dirPath: z.string().optional().describe("The path of the directory where the note is going to be stored"),
+      content: z.string().optional().describe("Custom markdown content to use instead of generating"),
+      useLlm: z.boolean().optional().describe("Whether to use the LLM to generate the content."),
+    }),
   }
-}
+);
 
 // Obsidian tool to write notes
 export async function createNote(
-  topic: string = "",
-  name: string = "Generated note.md",
+  topic = "",
+  name = "Generated note.md",
   tags: string[] = [],
-  context: string = "",
-  dirPath: string = "",
-  content: string = "",
-  useLlm: boolean = true,
+  context = "",
+  dirPath = "",
+  content = "",
+  useLlm = true,
 ) {
   const app = getApp();
   

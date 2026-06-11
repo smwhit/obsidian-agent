@@ -1,31 +1,24 @@
-import { Type } from '@google/genai';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 import { findClosestFile, findMatchingFolder } from "src/utils/notes/searching";
 
 
-export const vaultSearchFunctionDeclaration = {
-  name: "vault_search",
-  description: "Searches for notes and folders in Obsidian's user vault.",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      name: {
-        type: Type.STRING,
-        description: "The path or name to search for.",
-      },
-      isNote: {
-        type: Type.BOOLEAN,
-        description: "Whether is a note (True) or a folder (False)",
-        default: true,
-      },
-    },
-    required: ["name"],
-  },
-};
+export const vaultSearchTool = tool(
+  async ({ name, isNote }) => vaultSearch(name, isNote),
+  {
+    name: "vault_search",
+    description: "Searches for notes and folders in Obsidian's user vault.",
+    schema: z.object({
+      name: z.string().describe("The path or name to search for."),
+      isNote: z.boolean().optional().describe("Whether is a note (True) or a folder (False)"),
+    }),
+  }
+);
 
 // Search notes or folders in the vault with their name or path
 export async function vaultSearch(
   name: string, 
-  isNote: boolean = true,
+  isNote = true,
 ) {
   if (isNote) {
     // Search for the note
@@ -60,4 +53,4 @@ export async function vaultSearch(
       },
     };
   }
-};
+}

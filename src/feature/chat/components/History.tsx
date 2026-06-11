@@ -30,4 +30,4 @@ export default function History({
       <p>No messages have been sent. Send one to start the conversation.</p>
     </div>
   )
-};
+}
