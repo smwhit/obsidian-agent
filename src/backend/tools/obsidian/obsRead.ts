@@ -64,7 +64,7 @@ export async function readNote(
     const images: File[] = []
     if (settings.readImages) {
       // Extract base64 images from embeds
-      const embeds = getEmbeds(matchedFile);
+      const embeds = await getEmbeds(matchedFile);
       if (embeds.length > 0) {
         images.push(...embeds);
       }
@@ -102,7 +102,7 @@ export async function readNote(
       content = await removeImagesFromNote(content);
     }
   } catch (error) {
-    const errorMsg = 'Error processing images in the note: ' + error;
+    const errorMsg = 'Error processing images in the note: ' + (error instanceof Error ? error.message : String(error));
     if (settings.debug) console.error(errorMsg);
     
     return { success: false, response: errorMsg };

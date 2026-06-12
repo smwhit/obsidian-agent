@@ -12,8 +12,7 @@ export async function imageToBase64(image: File): Promise<string> {
     };
       
     reader.onerror = () => {
-      console.error(`Error reading image file: ${image.name}`)
-      reject("");
+      reject(new Error(`Error reading image file: ${image.name}`));
     };
     
     reader.readAsDataURL(image);

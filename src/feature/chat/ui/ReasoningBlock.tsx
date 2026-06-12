@@ -90,7 +90,7 @@ export default function Reasoning({
       const component = new Component();
       streamingComponentRef.current = component;
 
-      MarkdownRenderer.render(app, pre, container, "", component);
+      void MarkdownRenderer.render(app, pre, container, "", component);
       return;
     }
 
@@ -116,7 +116,7 @@ export default function Reasoning({
       const component = new Component();
       componentRefs.current[index] = component;
   
-      MarkdownRenderer.render(app, block.content, container, "", component);
+      void MarkdownRenderer.render(app, block.content, container, "", component);
     });
   
     return () => {

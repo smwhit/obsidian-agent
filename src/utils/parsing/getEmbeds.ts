@@ -1,11 +1,11 @@
-import { TFile, FileSystemAdapter } from "obsidian";
+import { TFile } from "obsidian";
 import { getApp } from "src/plugin";
-import path from "path";
-import fs from "fs";
 
 
-// Return File objects for every embedded image in a note
-export function getEmbeds(file: TFile) { 
+// Return File objects for every embedded image in a note.
+// Uses the Vault API (readBinary) so it works on every platform and never
+// touches the filesystem outside of the vault.
+export async function getEmbeds(file: TFile): Promise<File[]> {
   if (file.extension !== "md") return [];
 
   const app = getApp();
@@ -14,15 +14,6 @@ export function getEmbeds(file: TFile) {
 
   if (embeddedFiles && embeddedFiles.length > 0) {
     const images: File[] = [];
-
-    const adapter = app.vault.adapter;
-
-    if (!(adapter instanceof FileSystemAdapter)) {
-      console.error("Vault adapter is not a FileSystemAdapter. Cannot determine vault path.");
-      return [];
-    }
-
-    const vaultPath = adapter.getBasePath();
 
     for (const embedFile of embeddedFiles) {
       // Ignore non-image embeds
@@ -42,9 +33,8 @@ export function getEmbeds(file: TFile) {
 
         if (!match) continue;
 
-        const filePath = path.join(vaultPath, match.path);
-
-        const buffer = fs.readFileSync(filePath);
+        // Read the image through the Vault API
+        const buffer = await app.vault.readBinary(match);
 
         // Detect MIME type
         const mimeType =
@@ -52,9 +42,7 @@ export function getEmbeds(file: TFile) {
             ? "image/png"
             : "image/jpeg";
 
-        // Convert Buffer → File (copy into ArrayBuffer-backed Uint8Array)
-        const uint8Array = Uint8Array.from(buffer);
-        const fileObj = new File([uint8Array], match.name, { type: mimeType });
+        const fileObj = new File([new Uint8Array(buffer)], match.name, { type: mimeType });
 
         images.push(fileObj);
       } catch (error) {

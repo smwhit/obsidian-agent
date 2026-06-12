@@ -38,7 +38,7 @@ export default function Message({
   const handleCopy = () => {
     void navigator.clipboard.writeText(message.content);
     setCopied(true);
-    activeWindow.setTimeout(() => setCopied(false), 1000);
+    window.setTimeout(() => setCopied(false), 1000);
   }
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function Message({
     componentRef.current = newComponent;
     
     const processed = convertWikiLinksToMarkdown(message.content);
-    MarkdownRenderer.render(app, processed, container, '', newComponent);
+    void MarkdownRenderer.render(app, processed, container, '', newComponent);
 
     // Cleanup
     return () => {

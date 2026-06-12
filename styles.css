@@ -755,17 +755,19 @@
 /* ==============================
     UTILS
 ============================== */
-.obsidian-agent__display-none {
-    display: none !important;
+/* Utility classes rely on the .obsidian-agent parent for extra specificity
+   instead of !important (plugin guidelines discourage !important) */
+.obsidian-agent .obsidian-agent__display-none {
+    display: none;
 }
-.obsidian-agent__width-auto {
-    width: auto !important;
+.obsidian-agent .obsidian-agent__width-auto {
+    width: auto;
 }
-.obsidian-agent__cursor-pointer {
-    cursor: pointer !important;
+.obsidian-agent .obsidian-agent__cursor-pointer {
+    cursor: pointer;
 }
-.obsidian-agent__margin-left-auto {
-    margin-left: auto !important;
+.obsidian-agent .obsidian-agent__margin-left-auto {
+    margin-left: auto;
 }
 
 /* ==============================

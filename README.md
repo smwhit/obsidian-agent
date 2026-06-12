@@ -88,6 +88,17 @@ This plugin can connect to remote AI services (Google Gemini, Anthropic Claude, 
 
 To use Google, Anthropic, or OpenAI, you must set the corresponding API key. You are responsible for obtaining and managing your API keys. Ollama does not require an API key, but does require a local Ollama installation.
 
+**Network usage in detail:**
+
+- Your messages, the notes and images you attach, and any note content the agent reads with its tools are sent to the AI provider you selected (Google, Anthropic, or OpenAI) — or stay on your machine if you use Ollama. Nothing is sent anywhere until you send a message.
+- The bundled LangChain library may download token-counting data from `tiktoken.pages.dev` (a public CDN for the js-tiktoken library) when estimating message sizes for OpenAI models.
+- The plugin makes no other network requests: there is no telemetry, no analytics, and no data is shared with the plugin author.
+
+**Other capabilities used by the plugin:**
+
+- **Vault access**: the agent's tools can list, read, create, and edit notes and folders in your vault. Edits can be reviewed before being applied with the "Review changes" setting.
+- **Clipboard**: the copy buttons in the chat write the selected message or tool output to your system clipboard. The plugin never reads your clipboard.
+
 ## 🫱🏼‍🫲🏼 Contributing & Support
 
 - Found a bug? Open an issue [here](https://github.com/TheManuelML/obsidian-agent/issues).  

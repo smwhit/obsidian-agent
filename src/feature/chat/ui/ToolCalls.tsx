@@ -31,7 +31,7 @@ export default function ToolCalls({ toolCalls }: ToolCallsProps) {
     void navigator.clipboard.writeText(text);
     const key = `${toolCallIndex}-response`;
     setCopiedIndex(key);
-    activeWindow.setTimeout(() => setCopiedIndex(null), 2000);
+    window.setTimeout(() => setCopiedIndex(null), 2000);
   }
 
   return (

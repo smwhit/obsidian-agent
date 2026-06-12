@@ -95,7 +95,7 @@ export class ObsidianAgentPlugin extends Plugin {
     if (rightSplit && !rightSplit.collapsed) {
       rightSplit.collapse();
     } else {
-      this.activateAgentChatView();
+      void this.activateAgentChatView();
     }
   }
 
@@ -115,7 +115,7 @@ export class ObsidianAgentPlugin extends Plugin {
     }
 
     if (leaf) {
-      workspace.revealLeaf(leaf);
+      await workspace.revealLeaf(leaf);
     }
   }
 

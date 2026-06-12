@@ -188,7 +188,7 @@ export default function Input({
           const previewUrl = URL.createObjectURL(img);
           return (
             <div key={index} className="obsidian-agent__input__attachment-tag">
-              <img src={previewUrl!} alt={img.name} className="obsidian-agent__input__attachment-image"/>
+              <img src={previewUrl} alt={img.name} className="obsidian-agent__input__attachment-image"/>
               <span className="obsidian-agent__input__attachment-text">{img.name}</span>
               <button 
                 onClick={() => removeImage(index)} 

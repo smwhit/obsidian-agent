@@ -100,8 +100,14 @@ export class AgentSettingsTab extends PluginSettingTab {
     });
   }
 
-  // Method that displays the settings tab
+  // Entry point called by Obsidian. Kept as a thin wrapper so internal
+  // re-renders go through render() and avoid calling the deprecated display().
   display(): void {
+    this.render();
+  }
+
+  // Method that renders the settings tab
+  private render(): void {
     const { containerEl } = this;
     containerEl.empty();
 
@@ -120,7 +126,7 @@ export class AgentSettingsTab extends PluginSettingTab {
             this.plugin.settings.provider = value as Provider;
             await this.plugin.saveSettings();
             // Re-render so only the relevant credential field is shown
-            this.display();
+            this.render();
           });
       });
 
@@ -147,7 +153,7 @@ export class AgentSettingsTab extends PluginSettingTab {
               this.plugin.settings.provider = selected.provider;
               this.plugin.settings.model = selected.name;
               void plugin.saveSettings();
-              this.display();
+              this.render();
             }).open();
           });
       });
@@ -401,7 +407,7 @@ export class AgentSettingsTab extends PluginSettingTab {
         const { googleApiKey, anthropicApiKey, openaiApiKey } = this.plugin.settings;
         Object.assign(this.plugin.settings, DEFAULT_SETTINGS, { googleApiKey, anthropicApiKey, openaiApiKey });
         await this.plugin.saveSettings();
-        this.display();
+        this.render();
       });
       return button;
     });
