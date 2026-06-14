@@ -1,7 +1,7 @@
 {
 	"id": "ai-agent",
 	"name": "AI Agent",
-	"version": "2.0.0",
+	"version": "2.0.1",
 	"minAppVersion": "1.7.2",
 	"description": "Empower your vault with AI. Connect Google Gemini, Anthropic Claude, OpenAI, and local Ollama models as an agent that reads, writes, and searches your notes.",
 	"author": "Manuel Magaña López",
