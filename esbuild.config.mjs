@@ -34,6 +34,14 @@ const context = await esbuild.context({
 		"@lezer/lr",
 		...builtinModules,
 		...builtinModules.map((m) => `node:${m}`)],
+	// Replace process.env.NODE_ENV at build time so esbuild can tree-shake the
+	// development-only builds of React/React-DOM (and other deps) out of the
+	// production bundle. This removes the dev React-DOM build entirely, which
+	// also strips the dynamic <script> element creations that live in it, and
+	// significantly reduces the shipped bundle size.
+	define: {
+		"process.env.NODE_ENV": JSON.stringify(prod ? "production" : "development"),
+	},
 	format: "cjs",
 	target: "es2018",
 	logLevel: "info",
